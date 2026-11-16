@@ -2,11 +2,12 @@ import Foundation
 import WireKit
 
 public enum TransferError: LocalizedError {
-    case invalidPackage, invalidMap, refused(UInt8), noAcknowledgement
+    case invalidPackage, invalidMap, mapUpdateRequired, refused(UInt8), noAcknowledgement
     public var errorDescription: String? {
         switch self {
         case .invalidPackage: "The file is not a valid Watch Pro 2 app package."
         case .invalidMap: "Select a smaller map area, then try again."
+        case .mapUpdateRequired: "Update the watch app loader to version 5 and Trail Map to version 11 before downloading this map."
         case .refused(let code): "The watch rejected the map (code \(code))."
         case .noAcknowledgement: "The watch did not confirm the map. Open Trail Map on the watch and try again."
         }

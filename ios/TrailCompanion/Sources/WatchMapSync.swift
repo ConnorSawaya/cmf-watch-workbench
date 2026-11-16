@@ -81,7 +81,7 @@ extension MapModel {
         return try await withCheckedThrowingContinuation {completion in
             watchQueue.async {
                 let radius=scale*235
-                let features=store.visibleFeatures(bounds:[center.x-radius,center.y-radius,center.x+radius,center.y+radius],scale:scale<128 ? min(scale,4):scale)
+                let features=store.visibleFeatures(bounds:[center.x-radius,center.y-radius,center.x+radius,center.y+radius],scale:scale)
                 completion.resume(with:Result{try MapArtwork.make(center:center,scale:scale,states:store.states,features:features,route:route,pins:pins)})
             }
         }

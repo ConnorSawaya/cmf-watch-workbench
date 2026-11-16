@@ -16,7 +16,7 @@ mod progress;
  static mut CACHE:MapCache=MapCache::new();
  // Non-personal emulator counters: frames, last/max rendering milliseconds.
  #[unsafe(no_mangle)] static mut MAP_PERF:[u32;3]=[0;3];
- impl view::Surface for &Api {fn rect(&mut self,x:i32,y:i32,w:i32,h:i32,c:u16) {if w>0&&h>0 {Api::rect(self,x as i16,y as i16,w as u16,h as u16,c);}}fn offline(&mut self,m:&Model,clip:view::Bounds,overlay:bool)->Option<[u8;40]>{let(x,y)=m.viewport();self.offline_draw(x,y,m.scale,[clip.x,clip.y,clip.r,clip.b],m.fix.map(|f|(f.x,f.y)),overlay)}}
+ impl view::Surface for &Api {fn rect(&mut self,x:i32,y:i32,w:i32,h:i32,c:u16) {if w>0&&h>0 {Api::rect(self,x as i16,y as i16,w as u16,h as u16,c);}}fn offline(&mut self,m:&Model,clip:view::Bounds,overlay:bool)->Option<[u8;40]>{let(x,y)=m.viewport();let result=self.offline_draw(x,y,m.scale,[clip.x,clip.y,clip.r,clip.b],m.fix.map(|f|(f.x,f.y)),overlay);if result.is_some()&&!m.preview {if let Some(labels)=self.offline_labels(){view::native_labels(self,&labels,clip);}}result}}
  fn offline_status(api:&Api,m:&mut Model){if let Some(info)=api.offline_info(){m.offline=crate::model::u32le(&info,4)>0;let mut b=[0;28];b[..4].copy_from_slice(&[84,77,1,0x34]);b[4..].copy_from_slice(&info);let _=api.send(&b);}}
  #[inline(never)]
  fn save(api:&Api,m:&Model)->i32 {let mut b=[0;STORE_CAP];let n=m.store(&mut b);api.save(&b[..n])}
@@ -35,7 +35,7 @@ mod progress;
   offline_status(api,m);let _=api.send(&m.places.notice());
   api.own_back(true);paint(api,m,true);let _=api.send(b"TM\x01\x10");if restored {cached(api,m,cache);}else{let _=api.send(&cache.status());}
   let mut buf=[0u8;MSG_MAX];let mut paused=false;let mut live=m.fresh(api.now());let mut last_save=0u32;let mut saved_fix=None;let mut age_bucket=u32::MAX;let mut gesture_at=api.now();let mut request_at=0u32;
-  let mut dirty=false;let mut full=false;let mut frame_at=api.now();let mut cache_pending=false;let mut status_at=0u32;let mut progress_key=(0,0,0,0);
+  let mut queued=None;let mut dirty=false;let mut full=false;let mut frame_at=api.now();let mut cache_pending=false;let mut cache_lookup=false;let mut status_at=0u32;let mut progress_key=(0,0,0,0);
   loop {
    let now=api.now();
    if !paused&&now.wrapping_sub(status_at)>=200{status_at=now;let p=m.progress;let key=(p.phase,p.done/1000,p.percent(),p.visible(now) as u8+2*p.waiting(now) as u8);if key!=progress_key{progress_key=key;view::status(&mut &*api,m,now);api.show();}}
@@ -43,14 +43,16 @@ mod progress;
    if !paused&&now.wrapping_sub(gps_at)>=1000 {gps_at=now;let old=view::marker_bounds(m);let camera=m.viewport();if let Some(g)=api.watch_gps_read(){let on=g.on;let sat=g.satellites.unwrap_or(255);let changed=m.watch_fix(g,now);if camera!=m.viewport(){dirty=true;}else if changed&&!dirty {view::position_update(&mut &*api,m,now,old);api.show();}let _=api.send(&[84,77,1,0x17,on as u8,m.fix.is_some_and(|f|f.watch&&f.fresh(now)) as u8,sat]);}}
    if wake.expire(now) {api.keep_screen_on(false);}
    if !paused {
-    if cache_pending&&!dirty&&m.drag.is_none()&&now.wrapping_sub(gesture_at)>400 {if cache.save(api,m) {let _=api.send(&cache.status());}cache_pending=false;if m.progress.kind==1&&m.progress.phase==2{m.progress.finish(cache.available&&cache.last_error==0,api.now());}}
+    if m.preview&&m.drag.is_none()&&now.wrapping_sub(gesture_at)>120 {m.preview=false;dirty=true;}
+    if cache_lookup&&m.drag.is_none()&&now.wrapping_sub(gesture_at)>120 {cache_lookup=false;if cache.select(api,m){cached(api,m,cache);dirty=true;}}
+    if cache_pending&&!dirty&&m.drag.is_none()&&now.wrapping_sub(gesture_at)>600 {if cache.save(api,m) {let _=api.send(&cache.status());}cache_pending=false;if m.progress.kind==1&&m.progress.phase==2{m.progress.finish(cache.available&&cache.last_error==0,api.now());}}
     // Consume a burst into one camera update; do not queue a repaint per detent.
     if dirty&&now.wrapping_sub(frame_at)>=FRAME_MS {paint(api,m,full);dirty=false;full=false;frame_at=api.now();live=m.fresh(frame_at);}
     if m.browsing&&m.drag.is_none()&&m.needs_detail()&&now.wrapping_sub(gesture_at)>300&&now.wrapping_sub(request_at)>1000 {if api.send(&m.request())==0 {request_at=now;}}
    }
    let mut wait=if paused {u32::MAX}else{wake.wait(now)};
-   if !paused {wait=wait.min(if m.progress.visible(now){200}else{1000});if dirty {wait=wait.min(FRAME_MS.saturating_sub(now.wrapping_sub(frame_at)));}if cache_pending||m.browsing&&m.needs_detail() {wait=wait.min(100);}}
-   let Some(e)=api.event(wait) else {
+   if !paused {wait=wait.min(if m.progress.visible(now){200}else{1000});if dirty {wait=wait.min(FRAME_MS.saturating_sub(now.wrapping_sub(frame_at)));}if cache_pending||cache_lookup||m.preview||m.browsing&&m.needs_detail() {wait=wait.min(100);}}
+   let Some(e)=queued.take().or_else(||api.event(wait)) else {
     let now=api.now();let bucket=m.fix.map_or(u32::MAX,|f|f.age(now)/60);
     if !paused&&!dirty {if m.fresh(now)!=live {if !m.fresh(now) {_=save(api,m);}view::position_update(&mut &*api,m,now,view::marker_bounds(m));api.show();live=m.fresh(now);}else if !live&&bucket!=age_bucket {view::status(&mut &*api,m,now);api.show();}}
     age_bucket=bucket;continue;
@@ -86,10 +88,15 @@ mod progress;
      }
      if changed&&!dirty {view::position_update(&mut &*api,m,api.now(),old);api.show();live=m.fresh(api.now());}
     },
-    CROWN if !paused=>{let next=zoom(m.scale,e.delta);if next!=m.scale {if cache_pending {cache.save(api,m);cache_pending=false;}m.scale=next;m.browsing=true;m.drag=None;gesture_at=api.now();if cache.select(api,m) {cached(api,m,cache);}dirty=true;}},
+    CROWN if !paused=>{
+     let mut next=zoom(m.scale,e.delta);
+     // Drain queued crown events before rendering an obsolete camera.
+     for _ in 0..24 {let Some(event)=api.event(0) else{break;};if event.kind==CROWN {next=zoom(next,event.delta);}else{queued=Some(event);break;}}
+     if next!=m.scale {m.scale=next;m.browsing=true;m.preview=true;m.drag=None;gesture_at=api.now();cache_lookup=true;dirty=true;}
+    },
     TOUCH_DOWN if !paused=>{m.start_drag(e.x,e.y);},
-    TOUCH_MOVE if !paused=>{if m.move_drag(e.x,e.y) {gesture_at=api.now();dirty=true;}},
-    TOUCH_UP if !paused=>{if cache_pending {cache.save(api,m);cache_pending=false;}m.drag=None;gesture_at=api.now();if cache.select(api,m) {cached(api,m,cache);dirty=true;}},
+    TOUCH_MOVE if !paused=>{if m.move_drag(e.x,e.y) {m.preview=true;gesture_at=api.now();dirty=true;}},
+    TOUCH_UP if !paused=>{m.drag=None;gesture_at=api.now();cache_lookup=true;},
     _=>{},
    }
   }

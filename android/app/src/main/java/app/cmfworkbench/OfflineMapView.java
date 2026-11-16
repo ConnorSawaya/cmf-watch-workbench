@@ -193,7 +193,7 @@ public final class OfflineMapView extends View {
                 map.visible(cx - w * s / 2, cy - h * s / 2, cx + w * s / 2, cy + h * s / 2);
             for (int group : new int[] {3, 4, 1, 0, 2})
               for (var f : features) {
-                if (f.kind() != group) continue;
+                if (f.kind() != group || s<f.minScale() || s>f.maxScale()) continue;
                 path.rewind();
                 path.setFillType(Path.FillType.EVEN_ODD);
                 boolean visible = false;

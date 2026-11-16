@@ -8,7 +8,11 @@ else
     export LLVM_OBJCOPY=llvm-objcopy
 fi
 cd "$workbench_root/firmware/wp2-apps"
-for app in trail-map stopwatch intervals counter; do scripts/build-app "$app" 10; done
+for app in trail-map stopwatch intervals counter; do
+  workbench_version=10
+  if [ "$app" = trail-map ]; then workbench_version=11; fi
+  scripts/build-app "$app" "$workbench_version"
+done
 # Normalize diagnostic paths embedded by dependencies in the loader image.
 workbench_flags=$(printf '%s\037' -C link-arg=-Tlink.ld -C link-arg=--emit-relocs -C target-feature=+no-movt "--remap-path-prefix=$workbench_root=workbench" "--remap-path-prefix=$HOME=home")
 workbench_flags=${workbench_flags%$'\037'}
@@ -21,5 +25,5 @@ Path('target/loader.wp2app').unlink(missing_ok=True)
 PY
 uv run --locked wp2apps pack target/loader.bin \
   --elf fw/target/thumbv7em-none-eabi/release/wp2-loader \
-  --kind loader --name loader --version 4 --output target/loader.wp2app
+  --kind loader --name loader --version 5 --output target/loader.wp2app
 echo 'Built packages. Run runtime verification before staging them into a companion.'

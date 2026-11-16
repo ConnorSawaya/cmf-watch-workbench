@@ -49,11 +49,20 @@ fn disk(s:&mut impl Surface,x:i32,y:i32,r:i32,c:u16,clip:Bounds) {for dy in -r..
 pub fn marker_bounds(m:&Model)->Option<Bounds> {let f=m.fix?;let (x,y)=m.point(f.x,f.y);(Bounds{x:x-12,y:y-12,r:x+12,b:y+12}).intersection(MAP)}
 struct Clipped<'a,S:Surface> {surface:&'a mut S,clip:Bounds}
 impl<S:Surface> Surface for Clipped<'_,S> {fn rect(&mut self,x:i32,y:i32,w:i32,h:i32,c:u16) {if let Some(b)=(Bounds{x,y,r:x+w-1,b:y+h-1}).intersection(self.clip) {self.surface.rect(b.x,b.y,b.r-b.x+1,b.b-b.y+1,c);}}}
+pub fn native_labels(surface:&mut impl Surface,labels:&[u8;436],clip:Bounds){
+ let mut s=Clipped{surface,clip};
+ for i in 0..(labels[0] as usize).min(12){let at=4+i*36;let x=i16::from_le_bytes([labels[at],labels[at+1]]) as i32;let y=i16::from_le_bytes([labels[at+2],labels[at+3]]) as i32;let name=&labels[at+4..at+36];let mut n=name.iter().position(|&b|b==0).unwrap_or(32);while n>0&&width(core::str::from_utf8(&name[..n]).unwrap_or(""),0)>190{n-=1;}if n>0{let t=core::str::from_utf8(&name[..n]).unwrap_or("");let w=width(t,0);s.rect(x-w/2-3,y-10,w+6,23,PAPER);text(&mut s,x-w/2,y-7,t,0,INK);}}
+}
 pub fn map(surface:&mut impl Surface,m:&Model,now:u32,clip:Bounds) {
- let Some(clip)=clip.intersection(MAP) else{return;};let mut limited=Clipped{surface,clip};let s=&mut limited;clip.fill(s,crate::raster::PALETTE[0]);let covered=raster_bounds(m).is_some_and(|b|b.x<=clip.x&&b.y<=clip.y&&b.r>=clip.r&&b.b>=clip.b);if m.offline||!covered {crate::states::draw(s,m,clip);}
- if covered{raster_map(s,m,clip);}
- let native=if m.offline{s.surface.offline(m,clip,covered)}else{None};for(i,b)in native.unwrap_or([0;40]).chunks_exact(4).enumerate(){TRAIL_INFO[i].store(u32::from_le_bytes(b.try_into().unwrap()),core::sync::atomic::Ordering::Relaxed);}
- if native.is_none()&&!covered{raster_map(s,m,clip);}
+ let Some(clip)=clip.intersection(MAP) else{return;};let mut limited=Clipped{surface,clip};let s=&mut limited;clip.fill(s,if m.offline&&m.scale<=128{PAPER}else{crate::raster::PALETTE[0]});let covered=raster_bounds(m).is_some_and(|b|b.x<=clip.x&&b.y<=clip.y&&b.r>=clip.r&&b.b>=clip.b);
+ let exact=m.raster.valid&&m.raster.scale==m.scale&&m.viewport()==(m.raster.x,m.raster.y);
+ let artwork=covered&&(m.preview||exact||!m.offline);
+ // Country polygons have thousands of coast vertices. Neither an opaque
+ // image nor the local vector map needs that work behind every street frame.
+ if !artwork&&(!m.offline||m.scale>128){crate::states::draw(s,m,clip);}
+ if artwork{raster_map(s,m,clip);}
+ let native=if m.offline&&!artwork{s.surface.offline(m,clip,false)}else{None};for(i,b)in native.unwrap_or([0;40]).chunks_exact(4).enumerate(){TRAIL_INFO[i].store(u32::from_le_bytes(b.try_into().unwrap()),core::sync::atomic::Ordering::Relaxed);}
+ if native.is_none()&&!artwork{raster_map(s,m,clip);}
  if native.is_none()&&raster_bounds(m).is_none()&&m.scale<1500 {centre(s,205,"Map detail loading",0,INK);centre(s,231,"Keep Companion open",0,SECONDARY);}
  for (px,py,_) in m.places.iter(){let(x,y)=m.point(px,py);if x>=MAP.x&&x<=MAP.r&&y>=MAP.y&&y<=MAP.b{disk(s,x,y,6,PAPER,clip);disk(s,x,y,4,crate::raster::PALETTE[13],clip);}}
  if let Some(f)=m.fix {let (x,y)=m.point(f.x,f.y);if x>=MAP.x&&x<=MAP.r&&y>=MAP.y&&y<=MAP.b {
@@ -64,7 +73,7 @@ pub fn map(surface:&mut impl Surface,m:&Model,now:u32,clip:Bounds) {
 // A nearby cached image is a fast preview. Beyond 2x zoom use the vector
 // overview, rather than decoding an entire tiny stamp or huge blurry image.
 fn raster_bounds(m:&Model)->Option<Bounds> {
- let r=&m.raster;if !r.valid||m.scale>r.scale*2||r.scale>m.scale*2 {return None;}
+ let r=&m.raster;let limit=if m.preview{8}else{2};if !r.valid||m.scale>r.scale*limit||r.scale>m.scale*limit {return None;}
  let (vx,vy)=m.viewport();let x=233+(r.x-vx-r.scale*225)/m.scale;let y=220+(r.y-vy-r.scale*126)/m.scale;
  let b=Bounds{x,y,r:x+450*r.scale/m.scale-1,b:y+257*r.scale/m.scale-1};b.intersection(MAP)?;Some(b)
 }

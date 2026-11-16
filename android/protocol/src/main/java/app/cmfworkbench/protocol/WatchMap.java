@@ -9,13 +9,13 @@ import java.util.zip.Inflater;
 /** Spatially indexed WP2MAP1 vectors; imports validate every page before use. */
 public final class WatchMap {
   public record Feature(
-      int kind, int flags, int name, long length, boolean closed, List<int[]> parts) {}
+      int kind, int flags, int name, long length, boolean closed, int minScale, int maxScale, List<int[]> parts) {}
 
   public record Place(String name, double x, double y) {}
 
   public final byte[] data;
   public final long crc, trailSegments;
-  public final int grid, minX, minY, width, height;
+  public final int grid, minX, minY, width, height, codec;
   public final String[] names;
   public final double centerX, centerY, left, top, right, bottom;
   private double boundLeft = Double.POSITIVE_INFINITY,
@@ -41,8 +41,9 @@ public final class WatchMap {
         le(b, 8, 4) == 1 && le(b, 12, 4) == b.length && crc(Arrays.copyOf(b, 60)) == le(b, 60, 4),
         "Invalid map header checksum or size");
     grid = (int) le(b, 44, 4);
+    codec=(int)le(b,52,4);
     require(
-        (grid == 4 || grid == 8 || grid == 16) && le(b, 48, 4) == 8192 && le(b, 52, 4) == 1,
+        (grid == 4 || grid == 8 || grid == 16) && le(b, 48, 4) == 8192 && (codec==1||codec==2),
         "Unsupported map format");
     minX = (int) le(b, 16, 4);
     minY = (int) le(b, 20, 4);
@@ -117,10 +118,13 @@ public final class WatchMap {
         originX = (minX + tile % width) * 8192,
         originY = (minY + tile / width) * 8192;
     while (p < end) {
-      require(end - p >= 8, "Truncated page header");
+      int header=codec==2?20:8;
+      require(end - p >= header, "Truncated page header");
       int packed = (int) le(data, p, 2), raw = (int) le(data, p + 2, 2);
       long sum = le(data, p + 4, 4);
-      p += 8;
+      int minScale=1,maxScale=60000;int[] box={0,0,8192/grid,8192/grid};
+      if(codec==2){for(int i=0;i<4;i++)box[i]=(int)le(data,p+8+i*2,2);minScale=(int)le(data,p+16,2);maxScale=(int)le(data,p+18,2);require(box[0]<=box[2]&&box[1]<=box[3]&&box[2]<=8192/grid&&box[3]<=8192/grid&&minScale>=1&&maxScale>=minScale&&maxScale<=60000,"Invalid spatial page");}
+      p += header;
       require(
           packed > 0 && packed <= 16512 && raw > 0 && raw <= 16384 && packed <= end - p,
           "Invalid compressed page");
@@ -166,7 +170,7 @@ public final class WatchMap {
             x += r.signed();
             y += r.signed();
             require(
-                x >= 0 && y >= 0 && x <= 8192 / grid && y <= 8192 / grid, "Geometry outside cell");
+                x >= box[0] && y >= box[1] && x <= box[2] && y <= box[3], "Geometry outside cell");
             xy[k * 2] = originX + x * grid;
             xy[k * 2 + 1] = originY + y * grid;
           }
@@ -185,7 +189,7 @@ public final class WatchMap {
           }
         }
         require(r.position == limit, "Invalid geometry record length");
-        if (!index) out.add(new Feature(kind, flags, name, meters, closed == 1, parts));
+        if (!index) out.add(new Feature(kind, flags, name, meters, closed == 1, minScale, maxScale, parts));
       }
     }
     return out;

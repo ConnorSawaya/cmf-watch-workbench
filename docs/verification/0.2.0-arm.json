@@ -1,0 +1,54 @@
+{
+  "interrupted_transfer_preserved_app": true,
+  "corrupt_transfer_preserved_app": true,
+  "same_name_update_reused_slot": true,
+  "loader_unchanged_by_app_update": true,
+  "result": "arm_packages_verified",
+  "stub_version": 2,
+  "loader_slot": 255,
+  "app_slot": 0,
+  "loader_sha256": "ddd76114f01c0be22ff7ac9c9cd84efa3674a71f823135565ccfccfc7a846fa3",
+  "loader_version": 5,
+  "loader_upgrade_from": 4,
+  "app_sha256": "f05644a66bbf5a1d7680b75ba5d4acb596ab94019ae804661c56774cc005319b",
+  "app_name": "trail-map",
+  "app_version": 11,
+  "arm_native_codec2_render": true,
+  "arm_native_swipe_pan": true,
+  "arm_native_crown_zoom": true,
+  "arm_native_restart_without_phone_artwork": true,
+  "arm_native_frames": 14,
+  "arm_native_last_render_ms": 10,
+  "arm_native_max_render_ms": 79,
+  "packages": [
+    {
+      "name": "loader",
+      "sha256": "ddd76114f01c0be22ff7ac9c9cd84efa3674a71f823135565ccfccfc7a846fa3"
+    },
+    {
+      "name": "trail-map",
+      "sha256": "f05644a66bbf5a1d7680b75ba5d4acb596ab94019ae804661c56774cc005319b"
+    },
+    {
+      "name": "stopwatch",
+      "sha256": "7c0b056d7c1c30ce4337bcb3376a5c727cf3baf3dd0df5d65ad9ce9b581c843e",
+      "arm_launch": true,
+      "arm_input": true,
+      "arm_button_exit": true
+    },
+    {
+      "name": "intervals",
+      "sha256": "38bdfa6345750a2b0cc40e4f11229b2973ceb67ea2b140d1c343b27541b47ed5",
+      "arm_launch": true,
+      "arm_input": true,
+      "arm_button_exit": true
+    },
+    {
+      "name": "counter",
+      "sha256": "a59b7388fd14545c5db3438a6cab9b1584ac5981b480ed758987cbc88675f0e5",
+      "arm_launch": true,
+      "arm_input": true,
+      "arm_button_exit": true
+    }
+  ]
+}

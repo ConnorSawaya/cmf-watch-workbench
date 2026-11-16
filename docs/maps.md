@@ -7,9 +7,9 @@ accept OSM XML or PBF extracts rather than a fixed download region.
 mkdir -p build
 uv run python tools/import_map.py --source area.osm.pbf --output build/area.sqlite
 
-# Watch: simplified trails, named/unpaved walking ways, large parks and water.
+# Watch: trails, named streets, parks, woodland and water.
 uv run python tools/build_watch_map.py --source build/area.sqlite \
-  --output build/area.wp2map --profile hiking --coverage "Selected region"
+  --output build/area.wp2map --profile outdoors --coverage "Selected region"
 uv run python tools/check_watch_map.py build/area.wp2map
 
 # iOS phone map: richer geometry and an offline name index.
@@ -21,9 +21,12 @@ uv run python tools/build_search_index.py --source build/area-base.cmfmap \
 
 `--region boundary.geojson` clips the watch pack to an optional WGS84 Polygon
 or MultiPolygon. `--profile all-roads` keeps ordinary road geometry as well;
-it costs more storage. The default hiking profile omits buildings, ordinary
-street detail, unnamed urban sidewalks and small polygons. Sixteen-metre
-projected quantization is lossy. Names use an ASCII subset on the watch.
+it costs more storage. The default `outdoors` profile keeps named streets,
+trails, unpaved ways, named waterways and parks/water/woodland of at least
+10,000 square metres. Buildings and most unnamed urban sidewalks are omitted.
+The smaller `hiking` profile omits ordinary streets. The default 4 metre
+projected grid is lossy; `--grid 8` or `--grid 16` trades precision for space.
+Names use an ASCII subset on the watch.
 
 The input database can be supplemented with a compatible trail database using
 `--trail-source`. Source segment counts may overlap and are not a count of
@@ -71,3 +74,18 @@ companion. Use bookmark exchange, or build the supported formats from OSM.
 Map data © [OpenStreetMap contributors](https://www.openstreetmap.org/copyright),
 ODbL 1.0. Retain attribution and the applicable data license when distributing
 your derived maps. `examples/source.json` pins the separate Monaco demo source.
+
+## Spatial pages and redraws
+
+New packs use WP2MAP1 codec 2 and require loader v5 with Trail Map v11.
+Codec 1 packs remain supported. Each independent page carries cell-local
+bounds and a scale range; offscreen pages are skipped before decompression.
+The watch caches 32 decoded pages and their feature bounds in RAM. Labels
+come from the pack, with collision checks and a bounded name cache. Turning
+the crown combines queued input and defers image-cache writes until idle.
+
+`--subcell 1024`, `2048`, `4096` or `8192` controls spatial partitioning.
+Smaller partitions reduce cold-view work but increase storage. A pack has
+a maximum of 65,535 fixed-width names, including the empty name. Trail
+names receive priority; after the name table fills, remaining geometry is
+retained without a label and `omitted_name_labels` is reported.

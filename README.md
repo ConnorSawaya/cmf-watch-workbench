@@ -65,14 +65,15 @@ time. No account or map server is needed to draw, search or pan an imported map.
 uv sync
 uv run python tools/import_map.py --source area.osm.pbf --output build/area.sqlite
 uv run python tools/build_watch_map.py --source build/area.sqlite \
-  --output build/area.wp2map --profile hiking --coverage "My offline region"
+  --output build/area.wp2map --profile outdoors --coverage "My offline region"
 uv run python tools/check_watch_map.py build/area.wp2map
 ```
 
 The watch pack uses simplified vector geometry and a spatial index. It has a
 9.2 MB transfer limit and checks actual free watch storage before staging a new
 file. The old active map stays until the replacement is complete and verified.
-Ordinary street/building detail is not part of the default hiking profile.
+The default outdoors profile includes named streets, trails, parks and water.
+Buildings and most unnamed urban sidewalks are omitted; see [map profiles](docs/maps.md).
 
 Search shows at most 300 results. Saved-point GPX/GeoJSON import and GPX export
 allow bookmark exchange with Organic Maps. Its MWM files are a different format;

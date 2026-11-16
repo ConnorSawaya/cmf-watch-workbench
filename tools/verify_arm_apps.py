@@ -80,6 +80,8 @@ async def verify_all(hci):
             await asyncio.sleep(.25)
         await asyncio.sleep(pause)
     def byte_at(address):return int(q.hmp(f'xp /1bx {address:#x}')['return'].split()[-1],16)
+    from verify_arm_map import verify_map
+    await verify_map(hci,q,send,byte_at,report,root,wp,out,free_port)
     packages=[]
     async with h4.gatt_over_h4(hci,mtu=247) as gatt:
         session=link.Session();await session.open_channel(gatt)

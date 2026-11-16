@@ -22,10 +22,10 @@ impl Fix {
 pub struct Model {
  pub data:[u8;HEADER],pub len:usize,pending:[u8;HEADER],want:usize,got:usize,crc:u32,id:u16,running_crc:u32,bad_segment:bool,
  pub pan_x:i32,pub pan_y:i32,pub scale:i32,pub fix:Option<Fix>,
- pub drag:Option<(i16,i16,i32,i32)>,pub browsing:bool,pub raster:crate::raster::Raster,pub gps_on:bool,pub offline:bool,pub follow:bool,pub places:crate::places::Places,pub progress:crate::progress::Progress,pub place_want:usize,pub place_got:usize,
+ pub drag:Option<(i16,i16,i32,i32)>,pub browsing:bool,pub preview:bool,pub raster:crate::raster::Raster,pub gps_on:bool,pub offline:bool,pub follow:bool,pub places:crate::places::Places,pub progress:crate::progress::Progress,pub place_want:usize,pub place_got:usize,
 }
 impl Model {
- pub const fn new()->Self {Self{data:[0;HEADER],len:0,pending:[0;HEADER],want:0,got:0,crc:0,id:0,running_crc:!0,bad_segment:false,pan_x:0,pan_y:0,scale:40000,fix:None,drag:None,browsing:false,raster:crate::raster::Raster::new(),gps_on:false,offline:false,follow:true,places:crate::places::Places::new(),progress:crate::progress::Progress::new(),place_want:0,place_got:0}}
+ pub const fn new()->Self {Self{data:[0;HEADER],len:0,pending:[0;HEADER],want:0,got:0,crc:0,id:0,running_crc:!0,bad_segment:false,pan_x:0,pan_y:0,scale:40000,fix:None,drag:None,browsing:false,preview:false,raster:crate::raster::Raster::new(),gps_on:false,offline:false,follow:true,places:crate::places::Places::new(),progress:crate::progress::Progress::new(),place_want:0,place_got:0}}
  pub fn watch_fix(&mut self,g:cmf_wp2_app::WatchGps,now:u32)->bool {
   let on_changed=self.gps_on!=g.on;self.gps_on=g.on;if !g.known{return on_changed;}
   if !g.live {let mut changed=on_changed;if let Some(f)=self.fix.as_mut().filter(|f|f.watch){changed|=f.live;f.live=false;f.satellites=None;}return changed;}

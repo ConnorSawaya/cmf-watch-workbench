@@ -5,10 +5,10 @@ from pathlib import Path
 from PIL import Image
 root=Path(__file__).resolve().parents[1];wp=root/'firmware/wp2-apps';out=root/'build/watch-saved-progress';out.mkdir(exist_ok=True)
 env=dict(os.environ)
-fixture=json.loads((root/'build/artwork-check/sf-fixture.json').read_text());x,y,scale=struct.unpack_from('<iiH',bytes.fromhex(fixture['messages'][0]),12)
+fixture=json.loads((root/'build/artwork-check/monaco-fixture.json').read_text());x,y,scale=struct.unpack_from('<iiH',bytes.fromhex(fixture['messages'][0]),12)
 area=b'TM02'+struct.pack('<iiHH',x,y,0,scale)+b'Saved places'.ljust(32,b'\0')
 packets=[b'TM\1\1'+struct.pack('<HHI',900,len(area),zlib.crc32(area)),b'TM\1\2'+struct.pack('<HH',900,0)+area,b'TM\1\3'+struct.pack('<H',900)]+[bytes.fromhex(p) for p in fixture['messages']]
-record=struct.pack('<ii',x+scale*20,y)+b'SF test camp'.ljust(24,b'\0');places=b'TP10'+struct.pack('<HHI',1,0,zlib.crc32(record))+record
+record=struct.pack('<ii',x+scale*20,y)+b'Example camp'.ljust(24,b'\0');places=b'TP10'+struct.pack('<HHI',1,0,zlib.crc32(record))+record
 places_packets=[b'TM\1\x40'+struct.pack('<H',len(places)),b'TM\1\x41'+b'\0\0'+places,b'TM\1\x42']
 cmd=[]
 for p in packets+places_packets:cmd+=['mx '+p.hex(),'wait 30']

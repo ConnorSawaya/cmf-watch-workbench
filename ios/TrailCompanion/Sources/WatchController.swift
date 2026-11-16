@@ -454,7 +454,11 @@ import CompanionCore
         nativeMapAttempt=Date();nativeMapRequested=true
         run {
             guard let url=MapAssets.watchURL else{throw TransferError.invalidMap}
-            let data=try WatchMapFile(Data(contentsOf:url,options:.mappedIfSafe)).data
+            let map=try WatchMapFile(Data(contentsOf:url,options:.mappedIfSafe))
+            if map.codec==2 {
+                guard self.apps.values.contains(where:{$0.name=="loader" && $0.version>=5}),self.apps.values.contains(where:{$0.name=="trail-map" && $0.version>=11}) else{throw TransferError.mapUpdateRequired}
+            }
+            let data=map.data
             self.downloadingWatchMap=true;UIApplication.shared.isIdleTimerDisabled=true
             defer {self.downloadingWatchMap=false;UIApplication.shared.isIdleTimerDisabled=false}
             self.status="Downloading offline hiking map…";self.mapSyncStatus="Downloading hiking map to watch…"

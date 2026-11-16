@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Build a bounded, spatially indexed watch-native regional map.
 
-Source geometry comes from imported OpenStreetMap and optional supplemental data. Sixteen-metre projected quantization/simplification
+Source geometry comes from imported OpenStreetMap and optional supplemental data. Configurable projected quantization/simplification
 is lossy. Trails, walking paths, roads, parks and water are retained as separate
 parts; names and source segment lengths are preserved. No routing is implied.
 """
@@ -13,7 +13,7 @@ import numpy as np
 from shapely.geometry import box
 
 ROOT=Path(__file__).resolve().parents[1]
-CELL=8192;GRID=16;PAGE=16384;MAGIC=b'WP2MAP1\0';HEADER=64
+CELL=8192;GRID=4;PAGE=16384;MAGIC=b'WP2MAP1\0';HEADER=64
 TRAILS={'path','footway','bridleway','steps','pedestrian','cycleway','track','via_ferrata'}
 MAJOR={'motorway','trunk','primary','secondary','tertiary','motorway_link','trunk_link','primary_link','secondary_link','tertiary_link'}
 def uint(b,n):
@@ -43,23 +43,30 @@ def load_region(path):
  region=shapely.set_precision(shapely.transform(region,project),GRID,mode='valid_output')
  shapely.prepare(region)
  return region
-def build(output,budget,region_path=None,coverage=None,source=None,trail_source=None,profile="hiking"):
+def build(output,budget,region_path=None,coverage=None,source=None,trail_source=None,profile="outdoors",grid=4,codec=2,subcell=2048):
+ global GRID
+ if grid not in (4,8,16) or codec not in (1,2):raise ValueError("Unsupported grid or codec")
+ GRID=grid
+ if codec==1:subcell=CELL
+ if subcell not in (1024,2048,4096,8192):raise ValueError("Unsupported spatial page size")
  if output.exists():raise SystemExit(f'Refusing to replace {output}')
  stage=output.with_suffix('.stage.sqlite')
  if stage.exists():raise SystemExit(f'Refusing to replace {stage}')
- db=sqlite3.connect(stage);db.execute('PRAGMA journal_mode=OFF');db.execute('PRAGMA synchronous=OFF');db.execute('CREATE TABLE r(x INT,y INT,k INT,b BLOB)')
+ db=sqlite3.connect(stage);db.execute('PRAGMA journal_mode=OFF');db.execute('PRAGMA synchronous=OFF');db.execute('CREATE TABLE r(x INT,y INT,sx INT,sy INT,k INT,hi INT,l INT,t INT,r INT,b INT,record BLOB)')
  names=[''];ids={'':0};counts=Counter();batch=[];started=time.monotonic()
  region=load_region(region_path) if region_path else None
  def name_id(s):
   s=' '.join(unicodedata.normalize('NFKD',s).encode('ascii','ignore').decode().split())[:31]
-  if s not in ids:ids[s]=len(names);names.append(s)
-  if len(names)>65535:raise ValueError('Too many trail names')
+  if s not in ids:
+   if len(names)>=65535:counts['omitted_name_labels']+=1;return 0
+   ids[s]=len(names);names.append(s)
   return ids[s]
  trail_where="(kind='road' AND (subtype IN ('path','bridleway','cycleway','via_ferrata') OR (subtype IN ('footway','steps','pedestrian','track') AND (name<>'' OR (flags&2)<>0)))) OR (kind IN ('park','water') AND size>=100000)"
- if profile=='all-roads':trail_where="kind='road' OR (kind IN ('park','water') AND size>=100000)"
+ if profile=='all-roads':trail_where="kind IN ('road','waterway') OR (kind IN ('park','wood','water') AND size>=2500)"
+ if profile=='outdoors':trail_where="(kind='road' AND (name<>'' OR subtype IN ('path','bridleway','cycleway','via_ferrata') OR (flags&2)<>0)) OR (kind IN ('park','wood','water') AND size>=10000) OR (kind='waterway' AND name<>'')"
  source_notices=[]
  sources=[(source,trail_where,False)]
- if trail_source:sources.append((trail_source,"kind='road' AND (flags&8)<>0",True))
+ if trail_source:sources.insert(0,(trail_source,"kind='road' AND (flags&8)<>0",True))
  for source,where,usgs in sources:
   src=sqlite3.connect(f'file:{source}?mode=ro',uri=True)
   meta=src.execute("SELECT value FROM metadata WHERE key='summary'").fetchone()
@@ -73,6 +80,8 @@ def build(output,budget,region_path=None,coverage=None,source=None,trail_source=
    left,top,right,bottom=region.bounds
    query+=' AND id IN (SELECT id FROM bounds WHERE max_x>=? AND min_x<=? AND max_y>=? AND min_y<=?) ORDER BY id'
    params=(left,right,top,bottom)
+  query=query.removesuffix(" ORDER BY id")
+  query+=" ORDER BY CASE WHEN kind='road' AND subtype IN ('path','footway','bridleway','steps','pedestrian','cycleway','track','via_ferrata') THEN 0 ELSE 1 END,id"
   cursor=src.execute(query,params)
   while rows:=cursor.fetchmany(4096):
    geoms=shapely.from_wkb([r[5] for r in rows]);geoms=shapely.simplify(geoms,GRID,preserve_topology=True)
@@ -91,10 +100,12 @@ def build(output,budget,region_path=None,coverage=None,source=None,trail_source=
     if k==0:counts['trail_source_segments']+=1
     # Metadata length is the original source segment, not a whole named trail.
     length=min(0xffffffff,round(size/max(1,math.cosh(source_y/6378137)))) if k<3 else 0
-    nid=name_id(name if k==0 or profile=='all-roads' else '');left,top,right,bottom=g.bounds
-    for cy in range(math.floor(top/CELL),math.floor(bottom/CELL)+1):
-     for cx in range(math.floor(left/CELL),math.floor(right/CELL)+1):
-      tile=box(cx*CELL,cy*CELL,(cx+1)*CELL,(cy+1)*CELL)
+    nid=name_id(name if k==0 or profile in ('all-roads','outdoors') else '');left,top,right,bottom=g.bounds
+    hi=128 if k>=3 or subtype in MAJOR or (k==0 and name) else 32 if k==0 or subtype in ('service','living_street') else 64
+    for sy in range(math.floor(top/subcell),math.floor(bottom/subcell)+1):
+     for sx in range(math.floor(left/subcell),math.floor(right/subcell)+1):
+      cx=(sx*subcell)//CELL;cy=(sy*subcell)//CELL
+      tile=box(sx*subcell,sy*subcell,(sx+1)*subcell,(sy+1)*subcell)
       clipped=g if tile.covers(g) else shapely.intersection(g,tile)
       ps,closed=parts(clipped)
       if not ps:continue
@@ -104,19 +115,21 @@ def build(output,budget,region_path=None,coverage=None,source=None,trail_source=
       groups=[ps] if closed else [[p[start:start+180]] for p in ps for start in range(0,max(0,len(p)-1),179)]
       for group in groups:
        body=bytearray([k,flags&15]);body+=struct.pack('<HI',nid,length);body.append(int(closed));uint(body,len(group));points=0
+       bounds=[CELL//GRID,CELL//GRID,0,0]
        for part in group:
         coords=[]
         for x,y in part:
          p=(round(x/GRID)-cx*(CELL//GRID),round(y/GRID)-cy*(CELL//GRID))
          if not coords or coords[-1]!=p:coords.append(p)
+        for x,y in coords:bounds=[min(bounds[0],x),min(bounds[1],y),max(bounds[2],x),max(bounds[3],y)]
         uint(body,len(coords));px=py=0
         for x,y in coords:integer(body,x-px);integer(body,y-py);px,py=x,y
         points+=len(coords)
        if points<2:continue
        if len(body)+2>PAGE:raise ValueError('Feature exceeds page')
        record=struct.pack('<H',len(body))+body
-       batch.append((cx,cy,k,record));counts['records']+=1;counts['vertices']+=points
-   if batch:db.executemany('INSERT INTO r VALUES(?,?,?,?)',batch);batch=[];db.commit()
+       batch.append((cx,cy,sx,sy,k,hi,*bounds,record));counts['records']+=1;counts['vertices']+=points
+   if batch:db.executemany('INSERT INTO r VALUES(?,?,?,?,?,?,?,?,?,?,?)',batch);batch=[];db.commit()
    if counts['osm_source_features']%50000<4096:print(dict(counts),f'{time.monotonic()-started:.0f}s',flush=True)
   src.close()
  minx,miny,maxx,maxy=db.execute('SELECT min(x),min(y),max(x),max(y) FROM r').fetchone()
@@ -126,30 +139,35 @@ def build(output,budget,region_path=None,coverage=None,source=None,trail_source=
  pending=output.with_suffix('.building');entries=[(0,0)]*(w*h);pages=0;raw_total=0
  with pending.open('wb') as f:
   f.write(bytes(data_offset))
-  current=None;cell_start=0;raw=bytearray()
+  current=None;group_key=None;cell_start=0;raw=bytearray();page_bounds=None;page_hi=128
   def page():
-   nonlocal raw,pages,raw_total
+   nonlocal raw,pages,raw_total,page_bounds
    if not raw:return
    packed=zlib.compress(bytes(raw),9)
-   f.write(struct.pack('<HHI',len(packed),len(raw),zlib.crc32(raw)));f.write(packed);raw_total+=len(raw);pages+=1;raw=bytearray()
+   f.write(struct.pack('<HHI',len(packed),len(raw),zlib.crc32(raw)))
+   if codec==2:f.write(struct.pack('<HHHHHH',*page_bounds,1,page_hi))
+   f.write(packed);raw_total+=len(raw);pages+=1;raw=bytearray();page_bounds=None
   def finish():
    if current is None:return
    page();x,y=current;entries[(y-miny)*w+x-minx]=(cell_start,f.tell()-cell_start)
-  for x,y,k,record in db.execute('SELECT x,y,k,b FROM r ORDER BY y,x,(k=3) DESC,k DESC'):
+  for x,y,sx,sy,k,hi,l,t,r,b,record in db.execute('SELECT * FROM r ORDER BY y,x,sy,sx,(k=3) DESC,k DESC,hi'):
    if current!=(x,y):finish();current=(x,y);cell_start=f.tell()
-   if len(raw)+len(record)>PAGE:page()
+   next_group=(sx,sy,k,hi)
+   if len(raw)+len(record)>PAGE or (codec==2 and next_group!=group_key):page()
+   group_key=next_group;page_hi=hi
+   page_bounds=[l,t,r,b] if page_bounds is None else [min(page_bounds[0],l),min(page_bounds[1],t),max(page_bounds[2],r),max(page_bounds[3],b)]
    raw.extend(record)
   finish();size=f.tell()
   f.seek(HEADER)
   for offset,length in entries:f.write(struct.pack('<II',offset,length))
   for name in names:f.write(name.encode().ljust(32,b'\0'))
   header=bytearray(MAGIC+struct.pack('<IIiiHHIIII',1,size,minx,miny,w,h,names_offset,len(names),data_offset,counts['trail_source_segments']))
-  header+=struct.pack('<III',GRID,CELL,1)
+  header+=struct.pack('<III',GRID,CELL,codec)
   header+=bytes(60-len(header));header+=struct.pack('<I',zlib.crc32(header));f.seek(0);f.write(header)
  if size>budget:raise ValueError(f'Watch map needs {size:,} bytes; budget is {budget:,}. Candidate kept for inspection.')
  pending.replace(output);db.close()
- report=dict(format='WP2MAP1',bytes=size,budget=budget,coverage=coverage or 'Selected region: '+profile+' profile',grid_metres=GRID,cell_metres=CELL,**counts,names=len(names),pages=pages,raw_bytes=raw_total,elapsed=round(time.monotonic()-started,1),profile=profile,sha256=hashlib.sha256(output.read_bytes()).hexdigest(),sources=source_notices,overlap='Source segments may overlap; not unique named trails',lossy=True)
- if region_path:report['region']=dict(geojson=str(region_path),sha256=hashlib.sha256(region_path.read_bytes()).hexdigest(),clipping='Selected polygon union snapped to the 16 m projected grid')
+ report=dict(format='WP2MAP1',codec=codec,subcell_metres=subcell,bytes=size,budget=budget,coverage=coverage or 'Selected region: '+profile+' profile',grid_metres=GRID,cell_metres=CELL,**counts,names=len(names),pages=pages,raw_bytes=raw_total,elapsed=round(time.monotonic()-started,1),profile=profile,sha256=hashlib.sha256(output.read_bytes()).hexdigest(),sources=source_notices,overlap='Source segments may overlap; not unique named trails',lossy=True)
+ if region_path:report['region']=dict(geojson=str(region_path),sha256=hashlib.sha256(region_path.read_bytes()).hexdigest(),clipping=f'Selected polygon union snapped to the {GRID} m projected grid')
  output.with_suffix('.json').write_text(json.dumps(report,indent=2)+'\n');print(json.dumps(report,indent=2),flush=True)
 if __name__=='__main__':
  p=argparse.ArgumentParser(description=__doc__)
@@ -159,7 +177,10 @@ if __name__=='__main__':
  p.add_argument('--budget',type=int,default=9_200_000)
  p.add_argument('--region',type=Path,help='Optional WGS84 GeoJSON polygon mask')
  p.add_argument('--coverage',help='Coverage label')
- p.add_argument('--profile',choices=['hiking','all-roads'],default='hiking')
+ p.add_argument('--profile',choices=['hiking','outdoors','all-roads'],default='outdoors')
+ p.add_argument('--subcell',type=int,choices=[1024,2048,4096,8192],default=2048)
+ p.add_argument('--grid',type=int,choices=[4,8,16],default=4)
+ p.add_argument('--codec',type=int,choices=[1,2],default=2,help='2: bounded spatial pages (loader v5); 1: legacy pages')
  a=p.parse_args()
  a.output.parent.mkdir(parents=True,exist_ok=True)
- build(a.output,a.budget,a.region,a.coverage,a.source,a.trail_source,a.profile)
+ build(a.output,a.budget,a.region,a.coverage,a.source,a.trail_source,a.profile,a.grid,a.codec,a.subcell)

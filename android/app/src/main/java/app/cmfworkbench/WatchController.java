@@ -567,8 +567,8 @@ public final class WatchController {
         () -> {
           require(custom && map != null, "Connect to the app loader and import a map first");
           require(
-              apps.stream().anyMatch(h -> h.name().equals("loader") && h.version() >= 4)
-                  && apps.stream().anyMatch(h -> h.name().equals("trail-map") && h.version() >= 9),
+              apps.stream().anyMatch(h -> h.name().equals("loader") && h.version() >= (map.codec==2?5:4))
+                  && apps.stream().anyMatch(h -> h.name().equals("trail-map") && h.version() >= (map.codec==2?11:9)),
               "Update the loader and Trail Map first");
           require(session.ping()[0] == trailSlot(), "Open Trail Map on the watch first");
           total = map.data.length;

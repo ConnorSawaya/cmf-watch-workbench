@@ -7,7 +7,10 @@ static BLOCK:AtomicU32=AtomicU32::new(0);static OPEN:AtomicBool=AtomicBool::new(
 static mut FILE:fs::File=[0;44];
 static VERSION:AtomicU32=AtomicU32::new(0);
 fn file()->&'static mut fs::File{unsafe{&mut *(&raw mut FILE)}}
-fn scratch()->Option<&'static mut o::Scratch>{let mut p=BLOCK.load(Ordering::Relaxed);if p==0{let b=heap::alloc(heap::RES,mem::size_of::<o::Scratch>() as u32,16);if b.is_null(){return None;}unsafe{ptr::write_bytes(b,0,mem::size_of::<o::Scratch>());}p=b as u32;BLOCK.store(p,Ordering::Relaxed);}Some(unsafe{&mut *(p as *mut o::Scratch)})}
+struct ReadCache{data:[[u8;16384];4],at:[u32;4],len:[u16;4],next:usize}
+struct Memory{scratch:o::Scratch,io:ReadCache}
+fn memory()->Option<&'static mut Memory>{let mut p=BLOCK.load(Ordering::Relaxed);if p==0{let b=heap::alloc(heap::RES,mem::size_of::<Memory>() as u32,16);if b.is_null(){return None;}unsafe{ptr::write_bytes(b,0,mem::size_of::<Memory>());}p=b as u32;BLOCK.store(p,Ordering::Relaxed);}Some(unsafe{&mut *(p as *mut Memory)})}
+fn scratch()->Option<&'static mut o::Scratch>{memory().map(|m|&mut m.scratch)}
 fn head(path:&[u8])->Option<o::Header>{let mut f=[0;44];if fs::open(&mut f,path,fs::READ)<0{return None;}let mut b=[0;64];let h=if fs::read_exact(&mut f,&mut b){o::Header::parse(&b)}else{None};let n=if fs::seek(&mut f,0,2)==0{fs::tell(&mut f)}else{-1};fs::close(&mut f);h.filter(|h|n==h.size as i32)}
 fn path()->Option<&'static[u8]>{if head(MAP).is_some(){Some(MAP)}else if head(OLD).is_some(){Some(OLD)}else{None}}
 pub fn stop(){if OPEN.swap(false,Ordering::AcqRel){fs::sync(file());fs::close(file());}let p=BLOCK.swap(0,Ordering::Relaxed);if p!=0{unsafe{heap::free(heap::RES,p as *mut u8);}}}
@@ -25,14 +28,25 @@ fn begin(b:&[u8])->i32{
  SIZE.store(size,Ordering::Relaxed);CRC.store(crc,Ordering::Relaxed);VERSION.store(o::u32le(b,8),Ordering::Relaxed);SUM.store(sum,Ordering::Relaxed);OFFSET.store(offset,Ordering::Relaxed);OPEN.store(true,Ordering::Release);offset as i32
 }
 fn write(offset:u32,b:&[u8])->i32{if !OPEN.load(Ordering::Acquire)||offset!=OFFSET.load(Ordering::Relaxed)||b.len()>120||b.len() as u32>SIZE.load(Ordering::Relaxed)-offset{return -22;}if fs::write(file(),b)!=b.len() as i32{OPEN.store(false,Ordering::Release);fs::close(file());return -5;}SUM.store(crc32(SUM.load(Ordering::Relaxed),b),Ordering::Relaxed);let next=offset+b.len() as u32;OFFSET.store(next,Ordering::Relaxed);if offset/32768!=next/32768&&fs::sync(file())<0{return -5;}next as i32}
-fn commit()->i32{if !OPEN.load(Ordering::Acquire){return -5;}if OFFSET.load(Ordering::Relaxed)!=SIZE.load(Ordering::Relaxed)||SUM.load(Ordering::Relaxed)!=CRC.load(Ordering::Relaxed){OPEN.store(false,Ordering::Release);fs::close(file());return -5;}if fs::sync(file())<0{return -5;}OPEN.store(false,Ordering::Release);if fs::close(file())<0||head(PART).is_none(){return -5;}fs::unlink(OLD);let had=head(MAP).is_some();if had&&fs::rename(MAP,OLD)<0{return -5;}if fs::rename(PART,MAP)<0{if had{fs::rename(OLD,MAP);}return -5;}fs::unlink(OLD);let mut done=[0;12];done[..4].copy_from_slice(&SIZE.load(Ordering::Relaxed).to_le_bytes());done[4..8].copy_from_slice(&CRC.load(Ordering::Relaxed).to_le_bytes());done[8..12].copy_from_slice(&VERSION.load(Ordering::Relaxed).to_le_bytes());let mut f=[0;44];fs::unlink(DONE);if fs::open(&mut f,DONE,fs::WRITE|fs::CREATE)>=0{fs::write(&mut f,&done);fs::close(&mut f);}0}
-struct Reader{f:fs::File}
-impl o::Read for Reader{fn read(&mut self,at:u32,out:&mut[u8])->bool{fs::seek(&mut self.f,at as i32,0)==0&&fs::read_exact(&mut self.f,out)}}
+fn commit()->i32{if !OPEN.load(Ordering::Acquire){return -5;}if OFFSET.load(Ordering::Relaxed)!=SIZE.load(Ordering::Relaxed)||SUM.load(Ordering::Relaxed)!=CRC.load(Ordering::Relaxed){OPEN.store(false,Ordering::Release);fs::close(file());return -5;}if fs::sync(file())<0{return -5;}OPEN.store(false,Ordering::Release);if fs::close(file())<0||head(PART).is_none(){return -5;}fs::unlink(OLD);let had=head(MAP).is_some();if had&&fs::rename(MAP,OLD)<0{return -5;}if fs::rename(PART,MAP)<0{if had{fs::rename(OLD,MAP);}return -5;}fs::unlink(OLD);if let Some(m)=memory(){m.scratch.clear_pages();m.io.len.fill(0);}let mut done=[0;12];done[..4].copy_from_slice(&SIZE.load(Ordering::Relaxed).to_le_bytes());done[4..8].copy_from_slice(&CRC.load(Ordering::Relaxed).to_le_bytes());done[8..12].copy_from_slice(&VERSION.load(Ordering::Relaxed).to_le_bytes());let mut f=[0;44];fs::unlink(DONE);if fs::open(&mut f,DONE,fs::WRITE|fs::CREATE)>=0{fs::write(&mut f,&done);fs::close(&mut f);}0}
+struct Reader<'a>{f:fs::File,cache:&'a mut ReadCache,size:u32}
+impl o::Read for Reader<'_>{fn read(&mut self,mut at:u32,mut out:&mut[u8])->bool{
+ if at>self.size||out.len() as u32>self.size-at{return false;}
+ while !out.is_empty(){let block=at/16384*16384;
+  let i=if let Some(i)=(0..4).find(|&i|self.cache.len[i]>0&&self.cache.at[i]==block){i}else{
+   let i=self.cache.next%4;self.cache.next=self.cache.next.wrapping_add(1);self.cache.len[i]=0;
+   let n=(self.size-block).min(16384) as usize;
+   if fs::seek(&mut self.f,block as i32,0)!=0||!fs::read_exact(&mut self.f,&mut self.cache.data[i][..n]){return false;}
+   self.cache.at[i]=block;self.cache.len[i]=n as u16;i
+  };
+  let start=(at-block) as usize;let n=out.len().min(self.cache.len[i] as usize-start);out[..n].copy_from_slice(&self.cache.data[i][start..start+n]);at+=n as u32;out=&mut out[n..];
+ }true
+}}
 fn draw(b:&mut[u8])->i32{
- if b.len()!=80{return -22;}let Some(path)=path()else{return -2;};let Some(h)=head(path)else{return -5;};let Some(s)=scratch()else{return -12;};let w=|i|o::u32le(b,i) as i32;
+ if b.len()!=80{return -22;}let Some(path)=path()else{return -2;};let Some(h)=head(path)else{return -5;};let Some(m)=memory()else{return -12;};let w=|i|o::u32le(b,i) as i32;
  let c=o::Camera{x:w(0),y:w(4),scale:w(8),clip:[w(12),w(16),w(20),w(24)],fix:(b[28]!=0).then(||(w(32),w(36))),overlay:b[29]!=0};
- let mut reader=Reader{f:[0;44]};if fs::open(&mut reader.f,path,fs::READ)<0{return -5;}
- let result=o::render(&mut reader,h,s,c,|x,y,w,h,color|crate::ui::canvas().fill_rect(x,y,w,h,color));fs::close(&mut reader.f);
+ let mut reader=Reader{f:[0;44],cache:&mut m.io,size:h.size};if fs::open(&mut reader.f,path,fs::READ)<0{return -5;}
+ let result=o::render(&mut reader,h,&mut m.scratch,c,|x,y,w,h,color|crate::ui::canvas().fill_rect(x,y,w,h,color));fs::close(&mut reader.f);
  match result{Ok(info)=>{b[40..72].copy_from_slice(&info.name);b[72..76].copy_from_slice(&info.length.to_le_bytes());b[76..80].copy_from_slice(&info.distance.to_le_bytes());crate::ui::mark(wp2_core::gfx::rect_box(c.clip[0] as i16,c.clip[1] as i16,(c.clip[2]-c.clip[0]+1) as u16,(c.clip[3]-c.clip[1]+1) as u16));1},Err(e)=>e}
 }
 pub fn handle(cmd:&[u8])->i32{
@@ -41,5 +55,5 @@ pub fn handle(cmd:&[u8])->i32{
  let ram=wp2_core::layout::stub_ram();let base=ram.app_block as usize;let size=ram.app_size as usize;
  if p>usize::MAX as u64{return -22;}let p=p as usize;
  if p<base||p-base>size||n>size-(p-base){return -22;}let b=unsafe{core::slice::from_raw_parts_mut(p as *mut u8,n)};
- match op{0 if n==24=>{b.fill(0);let free=fs::free_space(MAP).map_or(0,|v|v.0.min(u32::MAX as u64) as u32);b[..4].copy_from_slice(&free.to_le_bytes());if let Some(h)=path().and_then(head){b[4..8].copy_from_slice(&h.size.to_le_bytes());b[8..12].copy_from_slice(&h.trails.to_le_bytes());let mut f=[0;44];if fs::open(&mut f,DONE,fs::READ)>=0{let mut done=[0;12];if fs::read_exact(&mut f,&mut done)&&o::u32le(&done,0)==h.size{b[16..24].copy_from_slice(&done[4..12]);}fs::close(&mut f);}}b[12..16].copy_from_slice(&OFFSET.load(Ordering::Relaxed).to_le_bytes());0},1=>begin(b),2=>write(offset,b),6=>draw(b),_=>-22}
+ match op{0 if n==24=>{b.fill(0);let free=fs::free_space(MAP).map_or(0,|v|v.0.min(u32::MAX as u64) as u32);b[..4].copy_from_slice(&free.to_le_bytes());if let Some(h)=path().and_then(head){b[4..8].copy_from_slice(&h.size.to_le_bytes());b[8..12].copy_from_slice(&h.trails.to_le_bytes());let mut f=[0;44];if fs::open(&mut f,DONE,fs::READ)>=0{let mut done=[0;12];if fs::read_exact(&mut f,&mut done)&&o::u32le(&done,0)==h.size{b[16..24].copy_from_slice(&done[4..12]);}fs::close(&mut f);}}b[12..16].copy_from_slice(&OFFSET.load(Ordering::Relaxed).to_le_bytes());0},1=>begin(b),2=>write(offset,b),7 if n==436=>{let Some(m)=memory()else{return -12;};b.fill(0);b[0]=m.scratch.label_count as u8;for(i,l)in m.scratch.labels[..m.scratch.label_count].iter().enumerate(){let at=4+i*36;b[at..at+2].copy_from_slice(&l.x.to_le_bytes());b[at+2..at+4].copy_from_slice(&l.y.to_le_bytes());b[at+4..at+36].copy_from_slice(&l.name);}0},6=>draw(b),_=>-22}
 }

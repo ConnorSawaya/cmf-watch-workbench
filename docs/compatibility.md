@@ -2,7 +2,7 @@
 
 | Target | Status |
 | --- | --- |
-| CMF Watch Pro 2, JX402 / D398, stock 1.0.0.73 | Current ROM port; loader v4 and Trail Map v10 have run on physical hardware. |
+| CMF Watch Pro 2, JX402 / D398, stock 1.0.0.73 | Current ROM port. Loader v4 / Trail Map v10 have hardware history; v5 / v11 pass ARM guest checks and await physical validation. |
 | Other firmware on Watch Pro 2 | Unsupported; ROM addresses must be re-derived and verified. |
 | Watch Pro, other CMF models, other brands | Unsupported. |
 | iOS | Native build, protocol tests, simulator checks; the custom app channel and native map transfer have been verified on an iPhone. |
@@ -54,3 +54,9 @@ the checks after a change.
 Loader v4 has physical hardware history from the stock-based source port. The
 release loader normalizes embedded compiler paths; its exact binary hash is
 covered by the ARM guest report rather than a new physical installation.
+
+The [0.2.0 ARM report](verification/0.2.0-arm.json) covers loader v5,
+Trail Map v11, codec 2 native rendering, swipe/crown input and cold restart
+without phone artwork. Its public sample reached 10 ms on the last redraw
+and 79 ms on the slowest measured redraw. These are emulator measurements,
+not physical-watch frame rates.

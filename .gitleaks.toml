@@ -1,0 +1,10 @@
+[extend]
+useDefault = true
+
+# Public test vector from the upstream SDK, restricted to its fixture files.
+[[allowlists]]
+description = "Upstream synthetic 00-ff protocol fixture"
+condition = "AND"
+paths = ['''firmware/wp2-apps/(tests/(test_link\.py|ios_vectors\.py)|ios/WireKit/Tests/WireKitTests/(SessionTests\.swift|vectors\.json))$''']
+regexTarget = "secret"
+regexes = ['''^00112233445566778899aabbccddeeff$''']

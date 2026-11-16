@@ -1,0 +1,123 @@
+from collections.abc import Iterator
+from dataclasses import dataclass
+import enum
+import struct
+import zlib
+
+from . import package
+from .link import SYSTEM
+
+MAX_DATA = 128
+SLOTS = 8
+LOADER_SLOT = 0xFF
+STUB_SLOT = 0xFE  # INFO for it: the stub's version (docs/abi-1.4.md, "Stub version")
+INFO, BEGIN, DATA, END, DELETE = 0x90A0, 0x90A1, 0x90A2, 0x90A3, 0x90A4
+
+
+class Status(enum.IntEnum):
+    OK = 0
+    BAD_REQUEST = 1
+    IO = 2
+    SEQUENCE = 3
+    CRC = 4
+    BUSY = 5
+    INVALID = 6
+    NO_APP = 7
+    FULL = 8
+    PAUSED = 9
+
+
+@dataclass(frozen=True)
+class Header:
+    name: str
+    version: int
+    kind: int
+    abi_minor: int
+    # INFO returns only the header; the SDK puts an icon in front of the code, so the entry moves off 0
+    icon: bool = False
+
+
+def chunks(data: bytes) -> Iterator[tuple[int, bytes]]:
+    for offset in range(0, len(data), MAX_DATA):
+        yield offset, data[offset:offset + MAX_DATA]
+
+
+async def _call(s, c2: int, payload: bytes) -> bytes:
+    reply = await s.request(SYSTEM, c2, payload, c2 | 0xA000)
+    if not reply:
+        raise ValueError("empty reply")
+    if reply[0] != Status.OK:
+        try:
+            name = Status(reply[0]).name
+        except ValueError:
+            name = f"status {reply[0]}"
+        raise ValueError(f"watch refused command {c2:#06x}: {name}")
+    return reply[1:]
+
+
+async def info(s, slot: int) -> Header | None:
+    raw = await _call(s, INFO, bytes([slot]))
+    if not raw:
+        return None
+    if len(raw) != package.HEADER_SIZE:
+        raise ValueError(f"header is {len(raw)} bytes")
+    _, _, kind, abi_minor, name, version, _, entry, *_ = package.HEADER.unpack(raw)
+    return Header(name.rstrip(b"\0").decode("utf-8", "replace"), version, kind, abi_minor,
+                  kind == package.KIND_APP and entry != 0)
+
+
+@dataclass(frozen=True)
+class Stub:
+    version: int  # 1: a stub from before the version was readable
+    abi_minor: int | None  # the highest package abi_minor it takes, None when it doesn't say
+
+
+async def stub(s) -> Stub:
+    """Which stub the watch runs. Stock firmware has none and doesn't answer at all (the request times out)."""
+    reply = await s.request(SYSTEM, INFO, bytes([STUB_SLOT]), INFO | 0xA000)
+    if reply[:1] == bytes([Status.BAD_REQUEST]):
+        return Stub(1, None)
+    if len(reply) != 6 or reply[0] != Status.OK:
+        raise ValueError(f"unexpected stub version reply {reply.hex()}")
+    return Stub(struct.unpack_from("<I", reply, 1)[0], reply[5])
+
+
+async def listing(s) -> dict[int, Header]:
+    found = {}
+    for slot in (*range(SLOTS), LOADER_SLOT):
+        header = await info(s, slot)
+        if header:
+            found[slot] = header
+    return found
+
+
+async def install(s, data: bytes, slot: int | None = None) -> int:
+    pkg = package.parse(data)
+    if pkg.kind == package.KIND_LOADER and slot not in (None, LOADER_SLOT):
+        raise ValueError("a loader package goes to slot L")
+    if pkg.kind != package.KIND_LOADER and slot == LOADER_SLOT:
+        raise ValueError("slot L takes only the loader package")
+    if pkg.kind == package.KIND_LOADER:
+        slot = LOADER_SLOT
+    elif slot is None:
+        used = await listing(s)
+        same = [n for n, h in used.items() if n < SLOTS and h.name == pkg.name]
+        free = [n for n in range(SLOTS) if n not in used]
+        if not same and not free:
+            raise ValueError("no free slot")
+        slot = (same or free)[0]
+    await upload(s, slot, data)
+    return slot
+
+
+async def upload(s, slot: int, data: bytes) -> None:
+    await _call(s, BEGIN, struct.pack("<BII", slot, len(data), zlib.crc32(data)))
+    for offset, part in chunks(data):
+        reply = await _call(s, DATA, struct.pack("<I", offset) + part)
+        if struct.unpack("<I", reply)[0] != offset + len(part):
+            raise ValueError(f"watch expects offset {struct.unpack('<I', reply)[0]}, sent {offset + len(part)}")
+    await _call(s, END, b"\0")
+
+
+async def remove(s, slot: int) -> None:
+    await _call(s, DELETE, bytes([slot]))

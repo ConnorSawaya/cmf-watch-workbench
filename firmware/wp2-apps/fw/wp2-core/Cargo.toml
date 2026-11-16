@@ -1,0 +1,12 @@
+[package]
+name = "wp2-core"
+description = "Shared no_std logic of the wp2-apps stub and loader"
+edition.workspace = true
+license.workspace = true
+version.workspace = true
+
+[dependencies]
+miniz_oxide = { version = "=0.8.9", default-features = false }
+
+[dev-dependencies]
+cmf-wp2-app = { path = "../../sdk/cmf-wp2-app" }

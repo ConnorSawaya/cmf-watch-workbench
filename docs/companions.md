@@ -1,18 +1,30 @@
 # Build the phone companions
 
-Generate the public example if you want an offline map on first launch:
+Generate the optional public map example first:
 
 ```sh
 ./tools/build_demo.sh
-./tools/build_apps.sh
-# After the emulator checks:
-uv run python tools/stage_packages.py --proof build/arm-proof/report.json
 ```
 
-The staging step checks exact package hashes against the test report, then
-copies only source-built `.wp2app` files and their records into the local app
-resources. It does not bundle a stock firmware image. Without staged packages,
-the companion can still build and show its disconnected/import screens.
+For a companion containing the published, tested loader and apps, download the
+five `.wp2app` release assets into `firmware/wp2-apps/target/`. With GitHub CLI:
+
+```sh
+mkdir -p firmware/wp2-apps/target
+gh release download v0.1.0 --repo ConnorSawaya/cmf-watch-workbench \
+  --pattern '*.wp2app' --dir firmware/wp2-apps/target
+python3 tools/stage_packages.py --proof docs/verification/0.1.0-arm.json
+```
+
+Staging verifies each exact package hash and its checksums, then copies the
+source-built files and their records into both local companion resource folders.
+It does not bundle or install a stock firmware image.
+
+For changed app code, build with `./tools/build_apps.sh`, rerun the
+[ARM guest verification](testing.md), then stage with
+`--proof build/arm-proof/report.json`. A different build cannot reuse the
+published hashes. Without staged packages the companions still build, but
+app installation requires a matching test manifest.
 
 ## Android
 

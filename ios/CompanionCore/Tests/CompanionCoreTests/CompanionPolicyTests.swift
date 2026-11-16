@@ -1,5 +1,6 @@
 import XCTest
 import CryptoKit
+import WireKit
 @testable import CompanionCore
 
 final class CompanionPolicyTests:XCTestCase {
@@ -27,10 +28,34 @@ final class CompanionPolicyTests:XCTestCase {
         XCTAssertThrowsError(try CompanionPolicy.validateClock(epoch:10000,offset:0,lastEpoch:10000,lastOffset:0,elapsed:121))
         XCTAssertThrowsError(try CompanionPolicy.validateClock(epoch:10060,offset:-3600,lastEpoch:10000,lastOffset:0,elapsed:60))
     }
+    func testPackageAllowlistRejectsDifferentDigestWithoutReleaseArtifacts() throws {
+        var bytes = Data(repeating: 0, count: 80)
+        bytes.replaceSubrange(0..<4, with: Data("WP2A".utf8))
+        bytes[4] = 1; bytes[7] = 1
+        bytes.replaceSubrange(8..<15, with: Data("fixture".utf8))
+        func put(_ value: UInt32, at offset: Int) {
+            for i in 0..<4 { bytes[offset + i] = UInt8(truncatingIfNeeded: value >> (i * 8)) }
+        }
+        put(1, at: 32); put(16, at: 36)
+        let imageCRC = WireKit.crc32(Data(bytes.dropFirst(64)))
+        put(imageCRC, at: 48)
+        let headerCRC = WireKit.crc32(Data(bytes.prefix(52)))
+        put(headerCRC, at: 52)
+        let package = try ValidatedPackage(bytes)
+        let digest = SHA256.hash(data: bytes).map { String(format: "%02x", $0) }.joined()
+        let record = TestedPackage(name: "fixture", kind: 0, version: 1, bytes: 80, sha256: digest)
+        XCTAssertNoThrow(try record.verify(package))
+        let different = TestedPackage(name: "fixture", kind: 0, version: 1, bytes: 80, sha256: String(repeating: "0", count: 64))
+        XCTAssertThrowsError(try different.verify(package))
+    }
     func testOnlyExactTestedBuildAccepted() throws {
         let root=URL(fileURLWithPath:#filePath).deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
         let folder=root.appendingPathComponent("ios/TrailCompanion/Resources")
-        let records=try JSONDecoder().decode([TestedPackage].self,from:Data(contentsOf:folder.appendingPathComponent("tested-packages.json")))
+        let manifest = folder.appendingPathComponent("tested-packages.json")
+        guard FileManager.default.fileExists(atPath: manifest.path) else {
+            throw XCTSkip("Stage reviewed packages to run the release-artifact integration check")
+        }
+        let records=try JSONDecoder().decode([TestedPackage].self,from:Data(contentsOf:manifest))
         if records.isEmpty {throw XCTSkip("Run tools/build_apps.sh and the package staging check first")}
         XCTAssertTrue(Set(records.map(\.name)).isSuperset(of:["loader","trail-map"]))
         for record in records {

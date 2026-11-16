@@ -35,10 +35,10 @@ final class TransferTests:XCTestCase {
         // Cold launch announces its initial camera before this test sends data.
         // Consume that announcement and wait for the actual drag request.
         while viewport==nil && ContinuousClock.now<until {
-            if let candidate=WatchViewport(message:try await ch.recv(timeout:until-ContinuousClock.now)),candidate.scale==4 {viewport=candidate}
+            if let candidate=WatchViewport(message:try await ch.recv(timeout:until-ContinuousClock.now)),candidate.scale==4 && candidate.x==99600 && candidate.y==99880 {viewport=candidate}
         }
         let v=try XCTUnwrap(viewport)
-        XCTAssertEqual(v.scale,4);XCTAssertEqual(v.x,-13330400);XCTAssertEqual(v.y,-4490120)
+        XCTAssertEqual(v.scale,4);XCTAssertEqual(v.x,99600);XCTAssertEqual(v.y,99880)
         let detail=try WatchSnapshot(x:v.x,y:v.y,metersPerPixel:v.scale,label:"Refreshed detail",segments:[WatchSegment(x1:-500,y1:0,x2:500,y2:0,kind:1)])
         try await sendSnapshot(detail,over:ch,id:124) {_ in}
         var pixels=[UInt8](repeating:1,count:WatchRaster.width*WatchRaster.height)

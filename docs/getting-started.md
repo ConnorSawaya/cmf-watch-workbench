@@ -23,13 +23,7 @@ git clone https://github.com/ConnorSawaya/cmf-watch-workbench.git
 cd cmf-watch-workbench
 rustup target add thumbv7em-none-eabi
 rustup component add llvm-tools
-uv sync
-./tools/build_demo.sh
 ```
-
-The demo downloads the public historical Monaco extract identified in
-`examples/source.json`. It generates local assets; it is not a current trail
-navigation dataset. Use a current extract for an area you intend to navigate.
 
 Obtain the emulator/tool checkout separately, following its own setup guide:
 
@@ -46,7 +40,7 @@ Use an emulator stock NOR with synthetic pairing data when testing.
 
 ```sh
 cd firmware/wp2-apps
-WP2_LOADER_VERSION=4 scripts/build-fw
+WP2_LOADER_VERSION=6 scripts/build-fw
 # Keep stock vibration options when producing your initial app patch:
 uv run --locked wp2apps firmware --stub target/wp2-stub.bin \
   --weak 0 --output target/app-loader.bin
@@ -96,7 +90,7 @@ cd firmware/wp2-apps
 uv run --locked wp2apps scan
 # Use the identifier returned by that scan:
 uv run --locked wp2apps install target/loader.wp2app --address "$WATCH_ADDRESS"
-uv run --locked wp2apps install target/trail-map.wp2app --address "$WATCH_ADDRESS"
+uv run --locked wp2apps install target/stopwatch.wp2app --address "$WATCH_ADDRESS"
 uv run --locked wp2apps list --address "$WATCH_ADDRESS"
 ```
 
@@ -105,8 +99,8 @@ macOS the identifier is a CoreBluetooth UUID. Do not paste identifiers or
 pairing output into an issue report.
 
 The stock app list must use **list style**. Open **Custom Apps**, then tap an
-installed app. Swipe to pan Trail Map and turn the crown to zoom. Keep Trail
-Map open for map downloads; close Custom Apps before installing app code.
+installed app. Tap an example app to open it; use the crown and touch controls it provides.
+Close Custom Apps before installing app code.
 
 Alternatively, build a companion with the reviewed packages and use its app
 manager. [Companion build instructions](companions.md).

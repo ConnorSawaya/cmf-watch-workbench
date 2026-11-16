@@ -15,11 +15,14 @@ def stage(proof_path):
         source=ROOT/'firmware/wp2-apps/target'/f'{name}.wp2app';b=source.read_bytes()
         if hashlib.sha256(b).hexdigest()!=record['sha256']:raise ValueError(f'{name}: package changed after testing')
         if b[:4]!=b'WP2A' or zlib.crc32(b[:52])!=struct.unpack_from('<I',b,52)[0] or zlib.crc32(b[64:])!=struct.unpack_from('<I',b,48)[0]:raise ValueError('Package checksum mismatch')
-        if name not in ('loader','trail-map') and not all(record.get(k) for k in ('arm_launch','arm_input','arm_button_exit')):raise ValueError(f'{name}: incomplete runtime evidence')
+        if name!='loader' and not all(record.get(k) for k in ('arm_launch','arm_input','arm_button_exit')):raise ValueError(f'{name}: incomplete runtime evidence')
         records.append(dict(name=name,kind=b[6],version=struct.unpack_from('<I',b,32)[0],bytes=len(b),sha256=record['sha256']))
-    if not {'loader','trail-map'}.issubset(r['name'] for r in records):raise ValueError('Loader and map evidence are required')
-    for folder in [ROOT/'ios/TrailCompanion/Resources',ROOT/'android/app/src/main/assets/generated']:
+    if not {'loader','stopwatch','intervals','counter'}.issubset(r['name'] for r in records):raise ValueError('Loader and example app evidence are required')
+    for folder in [ROOT/'ios/Workbench/Resources',ROOT/'android/app/src/main/assets/generated']:
         folder.mkdir(parents=True,exist_ok=True)
+        keep={r["name"]+".wp2app" for r in records}
+        for old in folder.glob("*.wp2app"):
+            if old.name not in keep:old.unlink()
         for record in records:shutil.copy2(ROOT/'firmware/wp2-apps/target'/f"{record['name']}.wp2app",folder/f"{record['name']}.wp2app")
         (folder/'tested-packages.json').write_text(json.dumps(records,indent=2)+'\n')
     print('Staged',len(records),'exact ARM-reviewed packages')

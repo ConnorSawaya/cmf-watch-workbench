@@ -42,12 +42,12 @@ async def install_code(hci):
             old_slot=await install.install(session,old)
             previous_version=(await install.info(session,old_slot)).version
         loader_slot = await install.install(session, (wp / 'target/loader.wp2app').read_bytes())
-        app_slot = await install.install(session, (wp / 'target/trail-map.wp2app').read_bytes())
+        app_slot = await install.install(session, (wp / 'target/stopwatch.wp2app').read_bytes())
         found = await install.listing(session)
         assert loader_slot == 255 and found[255].kind == 1
-        assert found[app_slot].name == 'trail-map'
+        assert found[app_slot].name == 'stopwatch'
         # Prove transfer failures cannot commit an incomplete or corrupt replacement.
-        data = (wp / 'target/trail-map.wp2app').read_bytes()
+        data = (wp / 'target/stopwatch.wp2app').read_bytes()
         await install._call(session, install.BEGIN, struct.pack('<BII', app_slot, len(data), zlib.crc32(data)))
         await install._call(session, install.DATA, struct.pack('<I', 0) + data[:128])
         assert await install.info(session, app_slot) == found[app_slot]  # INFO aborts staging.
@@ -81,8 +81,6 @@ async def verify_all(hci):
             await asyncio.sleep(.25)
         await asyncio.sleep(pause)
     def byte_at(address):return int(q.hmp(f'xp /1bx {address:#x}')['return'].split()[-1],16)
-    from verify_arm_map import verify_map
-    await verify_map(hci,q,send,byte_at,report,root,wp,out,free_port)
     packages=[]
     async with h4.gatt_over_h4(hci,mtu=247) as gatt:
         session=link.Session();await session.open_channel(gatt)
@@ -115,7 +113,7 @@ async def verify_all(hci):
             # The loader menu closes before the next install.
             await send('c 1','c 0',pause=2)
             packages.append(dict(name=name,sha256=hashlib.sha256(data).hexdigest(),arm_launch=True,arm_input=True,arm_button_exit=True))
-    core=[dict(name=n,sha256=hashlib.sha256((wp/f'target/{n}.wp2app').read_bytes()).hexdigest()) for n in ['loader','trail-map']]
+    core=[dict(name=n,sha256=hashlib.sha256((wp/f'target/{n}.wp2app').read_bytes()).hexdigest()) for n in ['loader']]
     report.update(result='arm_packages_verified',packages=core+packages)
     return report
 

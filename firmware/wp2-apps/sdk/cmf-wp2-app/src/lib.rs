@@ -4,7 +4,6 @@ use core::sync::atomic::{AtomicPtr, Ordering};
 
 mod cache;
 mod gps;
-mod offline;
 pub use gps::WatchGps;
 pub mod lv;
 pub mod stock;
@@ -17,7 +16,7 @@ pub static WP2_ABI_MINOR: u16 = ABI_MINOR;
 
 pub const TOUCH_DOWN: u8 = 1;
 pub const TOUCH_UP: u8 = 2;
-/// Finger position while held, supported by the map-pan loader.
+/// Finger position while held, supported by the loader.
 pub const TOUCH_MOVE: u8 = 10;
 pub const CROWN: u8 = 3;
 pub const BUTTON: u8 = 4;

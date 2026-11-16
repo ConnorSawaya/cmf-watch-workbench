@@ -4,7 +4,7 @@ Both companions can create and install a home-screen face for **Watch Pro 2
 JX402 / D398 on firmware 1.0.0.73**. This feature uses the stock face manager;
 it does not require the custom loader or another firmware update.
 
-On iOS, open **Watch → Watch faces**. On Android, open **Device → Daily controls → Watch faces**.
+On iOS, open **Faces** or **Watch → Watch faces**. On Android, open **Watch → Watch faces**.
 Choose **Create watch face**, enter a name, choose a clock colour and rounded
 or regular digits, and optionally select a background photo. Save the face,
 connect the watch, then choose **Install on watch** with custom apps closed.

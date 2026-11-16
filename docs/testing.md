@@ -3,7 +3,6 @@
 ## Host checks
 
 ```sh
-./tools/build_demo.sh
 cd firmware/wp2-apps
 host=$(rustc -vV | sed -n 's/^host: //p')
 (cd sdk && cargo test --target "$host")
@@ -15,10 +14,9 @@ swift test --package-path ios/CompanionCore
 ```
 
 Swift tests include malformed/corrupt package checks, stock session pairing,
-feature codecs, map/saved-place transfers and synchronization guards. Java
-tests use the same known crypto/frame vectors, fragmented pairing replies,
-read/write endianness, invalid readings and resumable map readback. Both map
-readers open the real output produced by the Python demo converter.
+feature codecs, watch-face transfers and synchronization guards. Java tests
+use the same known crypto/frame vectors, fragmented pairing replies,
+read/write endianness, invalid readings and watch-face transfer tests.
 
 Scripted watch runs test timing, input, pause/resume, wake release and persistent
 counter state. Screenshots in the gallery come from these runs, not a separate
@@ -45,10 +43,10 @@ also supplies GDB-based tests for other configured hosts.
 refuses a different artifact even when its name/version matches. Rebuilds after
 source changes need new proof. Simulator frame time is not a physical FPS claim.
 
-CI builds/tests source and the public map example. Physical BLE, stock OTA and
+CI builds and tests the SDK and both base companions. Physical BLE, stock OTA and
 recovery checks remain explicit hardware work, never a scheduled CI action.
 
-The [0.1.0 ARM report](verification/0.1.0-arm.json) records the tested package
+The [0.4.0 ARM report](verification/0.4.0-arm.json) records the tested package
 hashes. It is test evidence, not a substitute for reviewing new code or rerunning
 the checks after a change.
 

@@ -14,8 +14,6 @@ mod cache;
 #[cfg(target_os = "none")]
 mod gps;
 #[cfg(target_os = "none")]
-mod offline;
-#[cfg(target_os = "none")]
 mod hr;
 #[cfg(target_os = "none")]
 mod lv;

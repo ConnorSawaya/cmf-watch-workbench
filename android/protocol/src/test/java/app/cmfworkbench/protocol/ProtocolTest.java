@@ -7,7 +7,6 @@ import java.io.*;
 import java.util.*;
 import java.util.concurrent.*;
 import java.util.function.*;
-import java.util.zip.DeflaterOutputStream;
 import org.junit.Test;
 
 public class ProtocolTest {
@@ -121,33 +120,6 @@ public class ProtocolTest {
   }
 
   @Test
-  public void mapChecksAllCompressedPagesAndIndexes() throws Exception {
-    WatchMap m = new WatchMap(mapFixture());
-    assertEquals(1, m.trailSegments);
-    assertEquals("Public Trail", m.search("trail", 0, 0).get(0).name());
-    assertEquals(1, m.visible(0, 0, 1000, 1000).size());
-    assertTrue(m.visible(100000, 100000, 100001, 100001).isEmpty());
-    byte[] bad = mapFixture();
-    bad[bad.length - 2] ^= 1;
-    assertThrows(Exception.class, () -> new WatchMap(bad));
-  }
-
-  @Test
-  public void mapTransferResumesAndRequiresReadback() throws Exception {
-    WatchMap map = new WatchMap(mapFixture());
-    MapPeer peer = new MapPeer(map, 80);
-    List<Integer> progress = new ArrayList<>();
-    var saved = Transfer.map(peer, map, progress::add, b -> {});
-    assertEquals(Integer.valueOf(80), progress.get(0));
-    assertEquals(map.data.length, saved.bytes());
-    assertArrayEquals(map.data, peer.bytes);
-    assertTrue(peer.committed);
-    MapPeer broken = new MapPeer(map, 0);
-    broken.wrongReadback = true;
-    assertThrows(IllegalArgumentException.class, () -> Transfer.map(broken, map, n -> {}, b -> {}));
-  }
-
-  @Test
   public void stockAndCustomHandshakeWithFragmentedReplies() throws Exception {
     Peer link = new Peer();
     WatchSession session = new WatchSession(link);
@@ -173,47 +145,6 @@ public class ProtocolTest {
     assertNull(peer.clock);
   }
 
-  @Test
-  public void actualPythonConverterMapOpensAndSearches() throws Exception {
-    String path = System.getProperty("demoMapPath");
-    org.junit.Assume.assumeTrue(path != null && new File(path).isFile());
-    WatchMap map = new WatchMap(java.nio.file.Files.readAllBytes(new File(path).toPath()));
-    assertTrue(map.names.length > 100);
-    assertTrue(
-        map.visible(map.centerX - 8192, map.centerY - 8192, map.centerX + 8192, map.centerY + 8192)
-                .size()
-            > 800);
-  }
-
-  @Test
-  public void cameraUsesImportedBoundsWithoutFabricatingGps() throws Exception {
-    WatchMap map = new WatchMap(mapFixture());
-    List<byte[]> sent = new ArrayList<>();
-    Queue<byte[]> reply = new ArrayDeque<>();
-    Transfer.Channel peer =
-        new Transfer.Channel() {
-          public byte[] call(int c, byte[] b) {
-            throw new UnsupportedOperationException();
-          }
-
-          public void send(byte[] b) {
-            sent.add(b);
-            if (b[3] == 1 || b[3] == 3) reply.add(new byte[] {84, 77, 1, (byte) 128, 25, 0, 0});
-          }
-
-          public byte[] receive(long timeout) {
-            return reply.remove();
-          }
-        };
-    Transfer.mapCamera(peer, map, "Imported region", 25, b -> {});
-    assertEquals(3, sent.size());
-    byte[] body = Arrays.copyOfRange(sent.get(1), 8, sent.get(1).length);
-    assertEquals("TM02", text(body, 0, 4));
-    assertEquals(Math.round(map.centerX), le(body, 4, 4));
-    assertEquals(0, le(body, 12, 2));
-    assertEquals(crc(body), le(sent.get(0), 8, 4));
-  }
-
   static byte[] appFixture() {
     byte[] b = new byte[64 + 512];
     System.arraycopy("WP2A".getBytes(), 0, b, 0, 4);
@@ -229,95 +160,6 @@ public class ProtocolTest {
 
   static void put(byte[] b, int p, long value, int n) {
     System.arraycopy(le(value, n), 0, b, p, n);
-  }
-
-  static byte[] mapFixture() throws Exception {
-    byte[] body =
-        join(new byte[] {0, 0}, le(1, 2), le(1000, 4), new byte[] {0, 1, 2, 0, 0, 20, 20});
-    byte[] raw = join(le(body.length, 2), body);
-    ByteArrayOutputStream compressed = new ByteArrayOutputStream();
-    try (DeflaterOutputStream z = new DeflaterOutputStream(compressed)) {
-      z.write(raw);
-    }
-    byte[] page =
-        join(
-            le(compressed.size(), 2), le(raw.length, 2), le(crc(raw), 4), compressed.toByteArray());
-    int start = 64 + 8 + 64, size = start + page.length;
-    byte[] b = new byte[size];
-    System.arraycopy("WP2MAP1\0".getBytes(), 0, b, 0, 8);
-    put(b, 8, 1, 4);
-    put(b, 12, size, 4);
-    put(b, 24, 1, 2);
-    put(b, 26, 1, 2);
-    put(b, 28, 72, 4);
-    put(b, 32, 2, 4);
-    put(b, 36, start, 4);
-    put(b, 40, 1, 4);
-    put(b, 44, 16, 4);
-    put(b, 48, 8192, 4);
-    put(b, 52, 1, 4);
-    put(b, 60, crc(Arrays.copyOf(b, 60)), 4);
-    put(b, 64, start, 4);
-    put(b, 68, page.length, 4);
-    System.arraycopy(fixed("Public Trail", 32), 0, b, 104, 32);
-    System.arraycopy(page, 0, b, start, page.length);
-    return b;
-  }
-
-  static final class MapPeer implements Transfer.Channel {
-    final WatchMap map;
-    final Queue<byte[]> replies = new ArrayDeque<>();
-    final byte[] bytes;
-    int offset;
-    boolean committed, wrongReadback;
-
-    MapPeer(WatchMap m, int resume) {
-      map = m;
-      bytes = new byte[m.data.length];
-      System.arraycopy(m.data, 0, bytes, 0, resume);
-      offset = resume;
-    }
-
-    public byte[] call(int command, byte[] b) {
-      throw new UnsupportedOperationException();
-    }
-
-    public void send(byte[] b) {
-      int op = b[3] & 255;
-      if (op == 0x33) {
-        replies.add(
-            join(
-                new byte[] {84, 77, 1, 0x34},
-                le(9_000_000, 4),
-                le(committed ? bytes.length : 0, 4),
-                le(1, 4),
-                le(offset, 4),
-                le(committed ? (wrongReadback ? 0 : map.crc) : 0, 4),
-                le(1, 4)));
-      } else if (op == 0x30) {
-        replies.add(ack(0xb0, offset));
-      } else if (op == 0x31) {
-        assertEquals(offset, le(b, 4, 4));
-        System.arraycopy(b, 9, bytes, offset, b.length - 9);
-        offset += b.length - 9;
-        if (b[8] == 1) replies.add(ack(0xb1, offset));
-      } else if (op == 0x32) {
-        assertEquals(bytes.length, offset);
-        assertEquals(map.crc, crc(bytes));
-        committed = true;
-        replies.add(ack(0xb2, 0));
-      }
-    }
-
-    public byte[] receive(long timeout) throws IOException {
-      byte[] b = replies.poll();
-      if (b == null) throw new IOException("No reply");
-      return b;
-    }
-
-    static byte[] ack(int op, int value) {
-      return join(new byte[] {84, 77, 1, (byte) op}, le(value, 4));
-    }
   }
 
   static final class Peer implements WatchSession.Link {

@@ -299,8 +299,8 @@ have ~5 ms granularity (`next_event` in `fw/wp2-loader/src/app.rs`). Never spin 
 | `kind` | When | Fields, notes |
 |---|---|---|
 | `TOUCH_DOWN` (1) | finger down | `x`, `y` in screen pixels. Act on this one |
-| `TOUCH_UP` (2) | finger up | `x`, `y` are not reliable: in the emulator a tap at y 199 reported a row-0 `y` (herdr-agents now uses DOWN). The map-pan loader v2 also emits `TOUCH_MOVE` (10) while held, coalesced to the newest point at up to 25 Hz. Use these points for drag panning; do not depend on the release point. Older loaders do not emit moves |
-| `TOUCH_MOVE` (10) | map-pan loader v2: finger movement while held, x/y screen pixels; pending moves coalesce |
+| `TOUCH_UP` (2) | finger up | `x`, `y` are not reliable: in the emulator a tap at y 199 reported a row-0 `y` (herdr-agents now uses DOWN). The loader v2 also emits `TOUCH_MOVE` (10) while held, coalesced to the newest point at up to 25 Hz. Use these points for drag panning; do not depend on the release point. Older loaders do not emit moves |
+| `TOUCH_MOVE` (10) | loader v2: finger movement while held, x/y screen pixels; pending moves coalesce |
 | `CROWN` (3) | one crown detent | `delta` is `+1` or `-1`, never a magnitude; a fast turn is several events |
 | `BUTTON` (4) | crown press, or a right swipe (the stock "back") | The loader force-stops the app **1000 ms** later if it is still running (`ESCAPE_MS`, `wp2_core::events::escape_due`). Turn the motor off, save if needed, return. ABI 1.3: after `own_back(true)` it is an ordinary event and the app exits by returning; a `BUTTON` left unread for 1000 ms still force-stops it (`docs/abi-1.3.md`) |
 | `PAUSE` (5) | a stock popup (charger, incoming call, "Paired"; notifications use the call's popup type, untested) or another view covers the app | The queue is cleared, input is dropped, `vibrate` returns `-3` and the motor is cut, `show` does not reach the panel, host messages are refused with `PAUSED`. Stop the motor and animations, then block in `event(u32::MAX)` until `RESUME` (handle `BUTTON` there too, as `paused()` in agent-glow and herdr-agents does) |
@@ -735,11 +735,7 @@ Operations are probe=0, peek=1, get=2, put=3, clear=4; probe returns `0x43414331
 Only probe and clear use zero pointer/length. See `fw/wp2-core/src/cache.rs` and
 `fw/wp2-loader/src/cache.rs` for validation and the file journal.
 
-Trail Map v7 uses these records for eight full-quality colored views. Each record includes
-camera, scale, pixel checksum and save sequence. Repeated identical images do not rewrite
-NAND. A changed image at the same camera replaces that entry; otherwise the next empty
-entry or oldest saved entry is used. Closing/reopening restores the last view, and cached
-zoom levels load locally. New areas or uncached zoom levels still need the phone once.
+Applications can use these bounded records for larger replaceable data. Each cache is scoped to its app name; failed writes preserve the previous copy.
 
 ## 5a. LVGL apps (ABI 1.2)
 

@@ -13,7 +13,6 @@ pub mod heart;
 pub mod heap;
 pub mod layout;
 pub mod lvcmd;
-pub mod offline;
 #[cfg(target_os = "none")]
 pub mod load;
 pub mod pkg;

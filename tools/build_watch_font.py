@@ -6,8 +6,7 @@ from PIL import Image, ImageDraw, ImageFont
 root=Path(__file__).resolve().parents[1]
 parser=argparse.ArgumentParser(description=__doc__)
 parser.add_argument('--font',type=Path,default=root/'assets/fonts/Roboto-Regular.ttf')
-parser.add_argument('--output',type=Path,default=root/'firmware/wp2-apps/sdk/examples/trail-map/src')
-parser.add_argument('--full',action='store_true',help='Generate complete ASCII for the tool apps')
+parser.add_argument('--output',type=Path,default=root/'firmware/wp2-apps/sdk/cmf-workbench-tools/src')
 args=parser.parse_args();out=args.output;out.mkdir(parents=True,exist_ok=True)
 blob=bytearray();meta=[]
 for size in [16,20,24]:
@@ -15,9 +14,7 @@ for size in [16,20,24]:
  for code in range(32,127):
   ch=chr(code);advance=round(font.getlength(ch));w=max(advance+3,1);h=size+6
   im=Image.new('L',(w,h))
-  # The compact status uses 16 px. Keep the 20 px metric slots for compatibility
-  # without storing glyph bitmaps that Trail Map no longer draws.
-  if args.full or (size!=20 and (size!=24 or ch in 'Trail Map')):ImageDraw.Draw(im).text((1,0),ch,font=font,fill=255,anchor='la')
+  ImageDraw.Draw(im).text((1,0),ch,font=font,fill=255,anchor='la')
   pixels=[[min(3,(im.getpixel((x,y))+42)//85) for x in range(w)] for y in range(h)]
   used=[(x,y) for y in range(h) for x in range(w) if pixels[y][x]]
   gw=max((x+1 for x,y in used),default=0);gh=max((y+1 for x,y in used),default=0)

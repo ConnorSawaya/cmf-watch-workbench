@@ -2,7 +2,7 @@
 
 The detailed API reference and examples are in the retained
 [SDK app guide](../firmware/wp2-apps/docs/app-guide.md). This workbench adds
-native offline-map and GNSS services plus three small tool apps.
+generic GNSS access, bounded persistent caches and three small tool apps.
 
 ## Start from a working example
 
@@ -40,9 +40,6 @@ loop. Save on changes with coalescing, not every frame.
 | Installed app slots | 8 |
 | App message | 128 bytes |
 | Screen | 466 × 466 RGB565, circular display |
-| Recent detailed map images | 8 bounded, replaceable cache entries |
-| Named watch map places | 32 |
-| Native offline map | At most 9.2 MB, also subject to actual free NAND |
 
 The SDK table supports graphics, touch/crown/button events, clock, battery,
 bounded vibration, app messages, atomic app storage, display wake ownership,

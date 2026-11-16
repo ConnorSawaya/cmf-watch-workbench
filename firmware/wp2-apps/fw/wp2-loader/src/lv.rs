@@ -105,7 +105,6 @@ pub extern "C" fn submit(buf: *const u8, len: usize) -> i32 {
     }
     if len>0&&unsafe{*buf}==0x14 {return wp2_core::cache::request(unsafe {core::slice::from_raw_parts(buf,len)}).map_or(-22,crate::cache::handle);}
     if len>0&&unsafe{*buf}==0x16 {return crate::gps::handle(unsafe {core::slice::from_raw_parts(buf,len)});}
-    if len>0&&unsafe{*buf}==0x15 {return crate::offline::handle(unsafe {core::slice::from_raw_parts(buf,len)});}
     // SENSOR (heart rate) needs no LVGL: a canvas app sends it too, and it must not make the root
     if let Some((sensor, on)) = lvcmd::sensor(unsafe { core::slice::from_raw_parts(buf, len) }) {
         return crate::hr::request(sensor, on);

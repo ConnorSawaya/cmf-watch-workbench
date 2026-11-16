@@ -50,14 +50,14 @@ final class CompanionPolicyTests:XCTestCase {
     }
     func testOnlyExactTestedBuildAccepted() throws {
         let root=URL(fileURLWithPath:#filePath).deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
-        let folder=root.appendingPathComponent("ios/TrailCompanion/Resources")
+        let folder=root.appendingPathComponent("ios/Workbench/Resources")
         let manifest = folder.appendingPathComponent("tested-packages.json")
         guard FileManager.default.fileExists(atPath: manifest.path) else {
             throw XCTSkip("Stage reviewed packages to run the release-artifact integration check")
         }
         let records=try JSONDecoder().decode([TestedPackage].self,from:Data(contentsOf:manifest))
         if records.isEmpty {throw XCTSkip("Run tools/build_apps.sh and the package staging check first")}
-        XCTAssertTrue(Set(records.map(\.name)).isSuperset(of:["loader","trail-map"]))
+        XCTAssertTrue(Set(records.map(\.name)).isSuperset(of:["loader","stopwatch","intervals","counter"]))
         for record in records {
             let package=try ValidatedPackage(Data(contentsOf:folder.appendingPathComponent(record.name+".wp2app")))
             XCTAssertNoThrow(try record.verify(package))

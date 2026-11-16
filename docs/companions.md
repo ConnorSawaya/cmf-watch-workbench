@@ -1,92 +1,81 @@
-# Build the phone companions
+# Build the base companions
 
-Generate the optional public map example first:
+The public companions provide connection, pairing, device status, app package
+management and watch faces. Add your own screens alongside those features;
+keep protocol handling in `CompanionCore` or the Android `protocol` module.
 
-```sh
-./tools/build_demo.sh
-```
+## Stage reviewed packages
 
-For a companion containing the published, tested loader and apps, download the
-five `.wp2app` release assets into `firmware/wp2-apps/target/`. With GitHub CLI:
+Download the four tested packages and stage their exact hashes:
 
 ```sh
 mkdir -p firmware/wp2-apps/target
-gh release download v0.2.0 --repo ConnorSawaya/cmf-watch-workbench \
+gh release download v0.4.0 --repo ConnorSawaya/cmf-watch-workbench \
   --pattern '*.wp2app' --dir firmware/wp2-apps/target
-python3 tools/stage_packages.py --proof docs/verification/0.2.0-arm.json
+python3 tools/stage_packages.py --proof docs/verification/0.4.0-arm.json
 ```
 
-Staging verifies each exact package hash and its checksums, then copies the
-source-built files and their records into both local companion resource folders.
-It does not bundle or install a stock firmware image.
+For your own app, build with `tools/build_apps.sh`, add meaningful runtime
+checks to `tools/verify_arm_apps.py`, then stage using the resulting
+`build/arm-proof/report.json`. Rebuild the companion after staging. An app
+must match the manifest's name, kind, version, size and SHA-256 before installation.
 
-For changed app code, build with `./tools/build_apps.sh`, rerun the
-[ARM guest verification](testing.md), then stage with
-`--proof build/arm-proof/report.json`. A different build cannot reuse the
-published hashes. Without staged packages the companions still build, but
-app installation requires a matching test manifest.
+The apps also build without staged packages; the Examples section explains
+how to add them. No firmware image is bundled.
+
+## iOS
+
+Use macOS, Xcode 16+ with a recent Swift toolchain, and XcodeGen:
+
+```sh
+swift test --package-path ios/CompanionCore
+xcodegen generate --spec ios/Workbench/project.yml
+xcodebuild -project ios/Workbench/CMFWorkbench.xcodeproj \
+  -scheme CMFWorkbench -configuration Debug \
+  -destination 'generic/platform=iOS Simulator' \
+  -derivedDataPath build/ios CODE_SIGNING_ALLOWED=NO
+```
+
+For an iPhone, open the generated project, set your signing team and a unique
+bundle identifier, then run on the device. The source project supplies neither
+a signing identity nor a device identifier. Allow Bluetooth; the QR scanner
+uses the camera only when opened. The public app does not request location.
+
+The three tabs are **Apps**, **Faces** and **Watch**. Add a screen and send
+app-defined payloads through the SDK's message channel when extending the app.
+Bluetooth pairing alone does not install the initial stock loader patch;
+follow [getting started](getting-started.md) for that separate operation.
 
 ## Android
 
-Use JDK 21 and Android SDK 36. Point `ANDROID_HOME` at your SDK, or create your
-own ignored `android/local.properties` containing `sdk.dir=...`.
+Use JDK 21, Android SDK 36 and an Android 8 / API 26 or newer device:
 
 ```sh
-cd android
-./gradlew :protocol:test :app:assembleDebug
+./android/gradlew -p android :protocol:test :app:assembleDebug :app:lintRelease
 ```
 
-The local development APK is at
-`app/build/outputs/apk/debug/app-debug.apk`. The protocol module is plain Java
-and tests without a phone. The app requires Android 8 / API 26 or newer.
+The development APK is `android/app/build/outputs/apk/debug/app-debug.apk`.
+Grant Nearby devices permission to scan/connect. Android 8–11 use location
+permission for Bluetooth scanning only; the app does not collect position data.
+Choose a scan result explicitly. A QR image or link can identify the watch's
+name suffix. Pairing keys are protected by Android Keystore; backups are disabled.
 
-Grant Nearby devices permission to scan/connect. Location permission is only
-requested when using phone location (and for legacy Android BLE scanning).
-Scan results are chosen explicitly; QR image/link input helps identify the
-matching watch. Standard controls need a valid stock pairing/session, separate
-from the custom loader channel. Pairing keys are protected with Android Keystore;
-app backups are disabled. Actual device readings are not synthesized.
+**Watch** shows connection and device status. **Apps** manages reviewed packages.
+**Device** provides reset pairing, clock sync and battery reads. Watch faces
+are available from Watch or Device.
 
-Keep Trail Map open on the watch for a native-map transfer. Android's connected
-device foreground service supports the BLE connection; the visible app reports
-progress and prevents its own idle screen timeout during an operation.
+## Signed releases
 
-## Signed Android releases
+The published Android APK uses a dedicated signing identity. Future updates
+use that same identity. CI debug APKs use a separate development signature.
 
-The GitHub release APK uses a dedicated signing identity. Future releases must
-use the same identity to update an installed copy. CI debug artifacts have
-separate development signing and are not interchangeable with that release.
-
-To publish your own build, create a keystore and a private JSON file outside
-this checkout with `keystore`, `store_password`, `alias` and `key_password`.
-Keep a secure backup of the key. Run:
+To build your own signed APK, keep a keystore and private JSON configuration
+outside the checkout. The JSON keys are `keystore`, `store_password`, `alias`
+and `key_password`. Then run:
 
 ```sh
 python3 tools/build_android_release.py --signing-config "$SIGNING_CONFIG"
 ```
 
-The script passes credentials through the build environment. The output is
-`android/app/build/outputs/apk/release/app-release.apk`. iOS signing is separate.
-
-## iOS
-
-Use Xcode 16+ with a recent Swift toolchain, and XcodeGen. Set your own unique
-bundle identifier/signing team if needed.
-
-```sh
-xcodegen generate --spec ios/TrailCompanion/project.yml
-xcodebuild -project ios/TrailCompanion/TrailCompanion.xcodeproj \
-  -scheme TrailCompanion -configuration Debug \
-  -destination 'generic/platform=iOS Simulator' \
-  -derivedDataPath build/ios CODE_SIGNING_ALLOWED=NO
-swift test --package-path ios/CompanionCore
-```
-
-For a physical iPhone, open the generated project in Xcode, select your signing
-team and device, and run. No signing identity or device identifier is supplied
-by the project. Allow Bluetooth and, if wanted, location. Use Watch apps for
-reviewed package installs and map imports/downloads. The first stock patch is
-prepared separately as described in [getting started](getting-started.md).
-
-Both companions include a [watch-face editor and importer](watch-faces.md).
-Face upload uses the stock protocol and does not depend on staged app packages.
+Signing credentials are passed through the local build environment. iOS
+signing is configured separately in Xcode.

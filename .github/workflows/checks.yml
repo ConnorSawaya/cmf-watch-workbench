@@ -30,8 +30,6 @@ jobs:
       - name: Python protocol checks
         working-directory: firmware/wp2-apps
         run: uv run --locked python -m unittest discover -s tests -v
-      - name: Build public region
-        run: ./tools/build_demo.sh
   android:
     runs-on: ubuntu-latest
     steps:
@@ -47,7 +45,6 @@ jobs:
       - uses: astral-sh/setup-uv@v6
         with:
           python-version: '3.13'
-      - run: ./tools/build_demo.sh
       - run: ./android/gradlew -p android :protocol:test :app:assembleDebug :app:lintRelease --no-daemon
       - uses: actions/upload-artifact@v4
         with:
@@ -60,12 +57,11 @@ jobs:
       - uses: astral-sh/setup-uv@v6
         with:
           python-version: '3.13'
-      - run: ./tools/build_demo.sh
       - run: swift test --package-path ios/CompanionCore
       - run: brew install xcodegen
-      - run: xcodegen generate --spec ios/TrailCompanion/project.yml
+      - run: xcodegen generate --spec ios/Workbench/project.yml
       - run: >-
-          xcodebuild -project ios/TrailCompanion/TrailCompanion.xcodeproj
-          -scheme TrailCompanion -configuration Debug
+          xcodebuild -project ios/Workbench/CMFWorkbench.xcodeproj
+          -scheme CMFWorkbench -configuration Debug
           -destination 'generic/platform=iOS Simulator'
           -derivedDataPath build/ios CODE_SIGNING_ALLOWED=NO build

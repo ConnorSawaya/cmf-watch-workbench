@@ -1,123 +1,80 @@
 # CMF Watch Workbench
 
-Custom apps for the **CMF Watch Pro 2**: a Rust SDK, a stock-based app loader,
-offline maps, and companions for iOS and Android.
+A base for building custom apps and watch faces for the **CMF Watch Pro 2**.
+It includes a Rust SDK, a stock-based app loader, a simulator, and small iOS
+and Android companions you can extend for your own project.
 
-[Interactive controls](https://connorsawaya.github.io/cmf-watch-workbench/) ·
+[Try the controls](https://connorsawaya.github.io/cmf-watch-workbench/) ·
 [Install & build](docs/getting-started.md) · [Write an app](docs/apps.md) ·
-[Map regions](docs/maps.md) · [Watch faces](docs/watch-faces.md) · [Compatibility](docs/compatibility.md)
+[Build the companions](docs/companions.md) · [Watch faces](docs/watch-faces.md)
 
 <p align="center">
-  <img src="docs/media/watch-map.png" width="235" alt="Trail Map rendering the public Monaco example" />
-  <img src="docs/media/stopwatch.png" width="235" alt="Stopwatch running with a recorded lap" />
-  <img src="docs/media/intervals.png" width="235" alt="Configurable interval timer running on the watch simulator" />
+  <img src="docs/media/stopwatch.png" width="235" alt="Stopwatch running in the watch simulator" />
+  <img src="docs/media/intervals.png" width="235" alt="Interval timer running in the watch simulator" />
+  <img src="docs/media/counter.png" width="235" alt="Counter running in the watch simulator" />
 </p>
 
-*Captured app output from the watch simulator. The map example uses a pinned,
-historical OpenStreetMap extract of Monaco.*
+*Actual app output captured from the host simulator.*
 
-## A platform for apps
+## Build an app
 
-The loader adds **Custom Apps** to the watch's stock app list. Apps install into
-eight independent slots; adding or updating an app does not reflash the stock
-firmware. They draw on the 466 × 466 screen and receive real touch, crown,
-button, pause and resume events.
+The loader adds **Custom Apps** to the stock watch's app list. Eight independent
+slots let you add or update an app without repeating the initial firmware flash.
+Apps draw on the 466 × 466 display and receive touch, crown, button and lifecycle
+events. The SDK provides messages, atomic storage, clock, battery, display wake,
+haptics and supported sensor services.
 
-| App | What it does |
+| Example | Behavior |
 | --- | --- |
-| **Trail Map** | Offline vectors, crown zoom, swipe panning, a scale bar, built-in GNSS, last-known position, 32 saved places and resumable map downloads. |
-| **Stopwatch** | Start, pause, lap and reset, using the watch's monotonic clock. |
-| **Intervals** | Set work, rest and rounds with the crown; timed transitions use bounded haptic pulses. |
-| **Counter** | Tap or turn the crown; the count is saved on the watch and restored next time. |
+| Stopwatch | Start, pause, lap and reset using the watch's monotonic clock. |
+| Intervals | Choose work, rest and rounds, with timed transitions and haptics. |
+| Counter | Tap or turn the crown; restore the saved count next time. |
 
-These are native Rust apps using the same public SDK. Start a new app from an
-example, add its crate to the workspace, test it, and package it as `.wp2app`.
-The SDK exposes drawing, input, messages, atomic storage, time, battery,
-screen wake control, haptics and the supported sensor services.
+Copy an example, add its crate to the workspace, test it, then build a `.wp2app`
+package. The [app guide](docs/apps.md) covers budgets, storage and verification.
 
-## One workbench, two companions
+## Start with a small companion
+
+Both phone apps provide Bluetooth pairing, device and battery status, reviewed
+package installation, and a watch-face editor/importer. Their protocol libraries
+are separate from the screens, so you can add your own app-specific controls
+and messages. They are a starting point for developers, with readings supplied
+by the watch and installation progress confirmed by the device.
 
 <p align="center">
-  <img src="docs/media/ios-map.png" width="280" alt="iOS companion displaying the Monaco example map" />
-  <img src="docs/media/android-map.png" width="280" alt="Android companion displaying the same public example region" />
+  <img src="docs/media/ios-base.png" width="280" alt="The base iOS companion's app manager" />
+  <img src="docs/media/android-base.png" width="280" alt="The base Android companion's app manager" />
 </p>
 
-Both companions have actual Bluetooth protocol implementations: pairing,
-battery and health reads, alarms, favorite contacts, units, monitoring and
-supported daily settings. Their app managers check package checksums, firmware,
-the latest battery reading and whether Custom Apps is closed before installing.
-Map transfers report received bytes and resume at the watch-confirmed offset.
+Create a face with a photo background and clock colour, or import/export supported
+WFDL files. Face upload uses the stock face channel and needs a free face slot.
+It does not require a new firmware flash. [Watch-face guide](docs/watch-faces.md).
 
-Create a custom home-screen face with your photo, clock colours and live watch
-time, date and battery. Both companions can save, import, export and install
-supported `.wfdl` files through the stock face channel, without another firmware
-flash. See [custom watch faces](docs/watch-faces.md) for the workflow and test scope.
+[Download the signed Android APK](https://github.com/ConnorSawaya/cmf-watch-workbench/releases/latest).
+iOS builds with Xcode and your own signing team.
 
-Unknown readings stay empty until the watch supplies them. See the
-[feature and verification matrix](docs/compatibility.md) for differences between
-platforms and the stock phone app.
+## Supported hardware
 
-[Download the signed Android APK](https://github.com/ConnorSawaya/cmf-watch-workbench/releases/latest). Android also builds locally to an installable APK. iOS builds with Xcode and your own signing
-team. [Build the companions](docs/companions.md).
-
-## Choose your own offline region
-
-Import an OpenStreetMap extract, optionally clip it with a GeoJSON polygon, and
-build a phone map and a smaller watch map. Coverage is selected at build/import
-time. No account or map server is needed to draw, search or pan an imported map.
-
-```sh
-uv sync
-uv run python tools/import_map.py --source area.osm.pbf --output build/area.sqlite
-uv run python tools/build_watch_map.py --source build/area.sqlite \
-  --output build/area.wp2map --profile outdoors --coverage "My offline region"
-uv run python tools/check_watch_map.py build/area.wp2map
-```
-
-The watch pack uses simplified vector geometry and a spatial index. It has a
-9.2 MB transfer limit and checks actual free watch storage before staging a new
-file. The old active map stays until the replacement is complete and verified.
-The default outdoors profile includes named streets, trails, parks and water.
-Buildings and most unnamed urban sidewalks are omitted; see [map profiles](docs/maps.md).
-
-Search shows at most 300 results. Saved-point GPX/GeoJSON import and GPX export
-allow bookmark exchange with Organic Maps. Its MWM files are a different format;
-this project does not stream Organic Maps tiles or decode MWM files.
-
-## Start here
-
-1. **Check the device.** The current ROM port is for Watch Pro 2 **JX402 / D398,
-   firmware 1.0.0.73**. Other firmware versions and watch models are unsupported.
-2. **Build and test locally.** The [installation guide](docs/getting-started.md)
-   separates first-time stock firmware patching from ordinary app updates.
-3. **Install the loader once.** Prepare the patch using your own stock firmware
-   and validate it in the emulator before a physical OTA.
-4. **Add apps.** Build `.wp2app` packages, run the app checks, stage the reviewed
-   packages into a companion build, then install while Custom Apps is closed.
-5. **Open Trail Map** to receive a map region and saved places.
-
-The initial firmware update can make a watch unusable; a universally verified
-physical recovery procedure is not available. App-slot updates avoid that full
-firmware update, but native apps are not a security sandbox. Install code you
-have reviewed. There is no claim of arbitrary-firmware or cross-model support.
+The ROM port targets **Watch Pro 2, JX402 / D398, firmware 1.0.0.73**. Other
+models and firmware versions are unsupported. The initial stock patch can leave
+a watch unusable; physical recovery is not universally verified. Native apps
+are not a security sandbox. Review code and use the emulator before installation.
+See [compatibility and verification](docs/compatibility.md).
 
 ## Source layout
 
 ```text
 firmware/wp2-apps/   Rust SDK, stock stub, app loader, simulator and BLE CLI
-ios/                SwiftUI companion and independently testable protocol core
-android/            Android companion and JVM-tested Java protocol core
-tools/              Regional map builders, package staging and verification
-docs/               Installation, app development, formats and control preview
-examples/           Provenance for the reproducible public map example
+ios/Workbench/      SwiftUI base companion
+ios/CompanionCore/  Independently testable Swift protocol library
+android/            Android base companion and JVM protocol library
+tools/              App packaging, staging and runtime verification
+docs/               Installation, development and captured app output
 ```
 
-The loader and SDK build on
-[cmf-tech-community/cmf-watch-sdk](https://github.com/cmf-tech-community/cmf-watch-sdk).
-Original copyrights and the MIT license are retained. The external
-[cmf-watch-utils](https://github.com/freethinkel/cmf-watch-utils) emulator and
-firmware tools are used separately. Vendor firmware, ROMs and OTA images must
-be supplied locally.
+Built on [cmf-tech-community/cmf-watch-sdk](https://github.com/cmf-tech-community/cmf-watch-sdk).
+Upstream copyrights and the MIT license are retained. The external emulator and
+firmware tools are installed separately; vendor firmware, ROMs and OTA images
+must be supplied locally.
 
-Code: MIT. Roboto: Apache 2.0. Map data: © OpenStreetMap contributors, ODbL 1.0.
-See [NOTICE](NOTICE.md) and the [verification guide](docs/testing.md).
+Code: MIT. Roboto: Apache 2.0. See [NOTICE](NOTICE.md).

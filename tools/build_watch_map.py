@@ -43,10 +43,11 @@ def load_region(path):
  region=shapely.set_precision(shapely.transform(region,project),GRID,mode='valid_output')
  shapely.prepare(region)
  return region
-def build(output,budget,region_path=None,coverage=None,source=None,trail_source=None,profile="outdoors",grid=4,codec=2,subcell=2048):
+def build(output,budget,region_path=None,coverage=None,source=None,trail_source=None,profile="outdoors",grid=4,codec=2,subcell=2048,max_names=65535):
  global GRID
  if grid not in (4,8,16) or codec not in (1,2):raise ValueError("Unsupported grid or codec")
  GRID=grid
+ if not 1<=max_names<=65535:raise ValueError('Name budget must be 1..65535')
  if codec==1:subcell=CELL
  if subcell not in (1024,2048,4096,8192):raise ValueError("Unsupported spatial page size")
  if output.exists():raise SystemExit(f'Refusing to replace {output}')
@@ -58,7 +59,7 @@ def build(output,budget,region_path=None,coverage=None,source=None,trail_source=
  def name_id(s):
   s=' '.join(unicodedata.normalize('NFKD',s).encode('ascii','ignore').decode().split())[:31]
   if s not in ids:
-   if len(names)>=65535:counts['omitted_name_labels']+=1;return 0
+   if len(names)>=max_names:counts['omitted_name_labels']+=1;return 0
    ids[s]=len(names);names.append(s)
   return ids[s]
  trail_where="(kind='road' AND (subtype IN ('path','bridleway','cycleway','via_ferrata') OR (subtype IN ('footway','steps','pedestrian','track') AND (name<>'' OR (flags&2)<>0)))) OR (kind IN ('park','water') AND size>=100000)"
@@ -181,6 +182,7 @@ if __name__=='__main__':
  p.add_argument('--subcell',type=int,choices=[1024,2048,4096,8192],default=2048)
  p.add_argument('--grid',type=int,choices=[4,8,16],default=4)
  p.add_argument('--codec',type=int,choices=[1,2],default=2,help='2: bounded spatial pages (loader v5); 1: legacy pages')
+ p.add_argument('--max-names',type=int,default=65535,help='Name table budget; trail names are prioritized, all geometry is kept')
  a=p.parse_args()
  a.output.parent.mkdir(parents=True,exist_ok=True)
- build(a.output,a.budget,a.region,a.coverage,a.source,a.trail_source,a.profile,a.grid,a.codec,a.subcell)
+ build(a.output,a.budget,a.region,a.coverage,a.source,a.trail_source,a.profile,a.grid,a.codec,a.subcell,a.max_names)

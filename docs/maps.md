@@ -89,3 +89,6 @@ Smaller partitions reduce cold-view work but increase storage. A pack has
 a maximum of 65,535 fixed-width names, including the empty name. Trail
 names receive priority; after the name table fills, remaining geometry is
 retained without a label and `omitted_name_labels` is reported.
+`--max-names` can lower that limit without dropping geometry. Leave room
+for both the existing map and a complete staged replacement, plus the
+loader’s transfer reserve; the per-file limit is not a free-space guarantee.

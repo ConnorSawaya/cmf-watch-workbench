@@ -34,5 +34,5 @@ android {
 }
 dependencies {
     implementation project(':protocol')
-    implementation 'com.google.zxing:core:3.5.3'
+    implementation 'com.google.zxing:core:3.5.4'
 }

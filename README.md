@@ -5,7 +5,7 @@ offline maps, and companions for iOS and Android.
 
 [Interactive controls](https://connorsawaya.github.io/cmf-watch-workbench/) ·
 [Install & build](docs/getting-started.md) · [Write an app](docs/apps.md) ·
-[Map regions](docs/maps.md) · [Compatibility](docs/compatibility.md)
+[Map regions](docs/maps.md) · [Watch faces](docs/watch-faces.md) · [Compatibility](docs/compatibility.md)
 
 <p align="center">
   <img src="docs/media/watch-map.png" width="235" alt="Trail Map rendering the public Monaco example" />
@@ -47,6 +47,11 @@ battery and health reads, alarms, favorite contacts, units, monitoring and
 supported daily settings. Their app managers check package checksums, firmware,
 the latest battery reading and whether Custom Apps is closed before installing.
 Map transfers report received bytes and resume at the watch-confirmed offset.
+
+Create a custom home-screen face with your photo, clock colours and live watch
+time, date and battery. Both companions can save, import, export and install
+supported `.wfdl` files through the stock face channel, without another firmware
+flash. See [custom watch faces](docs/watch-faces.md) for the workflow and test scope.
 
 Unknown readings stay empty until the watch supplies them. See the
 [feature and verification matrix](docs/compatibility.md) for differences between

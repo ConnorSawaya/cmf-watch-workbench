@@ -8,6 +8,10 @@
 - `WatchBLE.swift` adapts that SDK's MIT-licensed iOS BLE transport. The stock
   protocol codecs are independently written, using the public protocol facts
   linked in `ios/TrailCompanion/THIRD_PARTY.md`.
+- The independently written WFDL codecs and face uploaders use public protocol
+  facts from [FMC](https://github.com/freethinkel/fmc/blob/main/docs/cmf-protocol.md)
+  and [CMF Watch Pro 2 BLE research](https://github.com/joshuapassos/CMF-Watch-Pro-2-BLE-Protocol).
+  These projects' implementation code is not included.
 - Roboto Regular is from Google's `roboto-2` project, under Apache 2.0. Font
   source, license and notice are in `assets/fonts`. Generated coverage tables
   preserve that attribution.

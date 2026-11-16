@@ -1,0 +1,14 @@
+{
+  "result": "watch_face_arm_verified",
+  "face_sha256": "dbb32ef60abb4d4e43457818f668222c435948e111ce06203f1d3c7bc62aa5de",
+  "face_bytes": 36281,
+  "production_swift_uploader": true,
+  "stock_face_channel": true,
+  "without_response_writes": true,
+  "activated_ack": true,
+  "live_clock_changed": true,
+  "natural_minute_tick": true,
+  "custom_texture_format_index": true,
+  "reference_slot_freed_by_stock_protocol": true,
+  "firmware_ota_used": false
+}

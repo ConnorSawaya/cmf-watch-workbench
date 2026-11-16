@@ -47,7 +47,7 @@ public actor StockConnection {
     public static let otaNotify="02F00000-0000-0000-0000-00000000FF02"
     private let link:any Link
     private var key:Data?
-    private var parser=StockFrameReader()
+    private var parsers=[String:StockFrameReader]()
     private var chunks=StockChunks()
     private var health=WatchHealth()
     private let abilities=PairInbox<(UInt16,UInt16,Data)>()
@@ -65,7 +65,9 @@ public actor StockConnection {
     private func feed(_ uuid:String,_ data:Data) async {
         if uuid==Uuid.shellNotify {await shell.put(data)}
         if uuid==Uuid.cmdNotify || uuid==Self.otaNotify || uuid=="02F00000-0000-0000-0000-00000000FFE2" {
-            for f in parser.feed(data) {
+            var parser=parsers[uuid] ?? StockFrameReader()
+            let frames=parser.feed(data);parsers[uuid]=parser
+            for f in frames {
                 if f.ability==system {await replies.put((f.command,f.body))}
                 else if let key,let plain=f.body.isEmpty ? Data():WireKit.open(key,f.body),let full=chunks.append(f,plain:plain) {
                     health.ingest(ability:f.ability,command:f.command,data:full)
@@ -186,6 +188,53 @@ public actor StockConnection {
             try Task.checkCancellation()
             guard let (cmd,body)=await replies.next(.seconds(20)) else{continue}
             if cmd==0x0005,WireKit.open(key,body)?.first==2 {health.syncedAt=Date();return health}
+        }
+        throw PairingError.timeout
+    }
+    public static let faceWrite="02F00000-0000-0000-0000-00000000FFE1"
+    private func sendFace(_ command:UInt16,_ payload:Data,plain:Bool=false) async throws {
+        guard let key else{throw PairingError.invalidChallenge}
+        let limit=plain ? 160:155,count=max(1,(payload.count+limit-1)/limit)
+        guard count<=65535 else{throw WatchFaceError.invalidRequest}
+        for i in 0..<count {
+            try Task.checkCancellation()
+            let part=Data(payload[i*limit..<min(payload.count,(i+1)*limit)])
+            var frame=WireKit.frame(c2:command,payload:part,key:plain ? nil:key)
+            frame[5]=UInt8(count>>8);frame[6]=UInt8(count&255);frame[7]=UInt8((i+1)>>8);frame[8]=UInt8((i+1)&255)
+            try await link.writeWithoutResponse(Self.faceWrite,frame)
+            if plain {try await Task.sleep(for:.milliseconds(10))}
+        }
+    }
+    public func uploadFace(_ face:FaceFile,id:UInt32,delete:Bool=false,progress:@Sendable(Int) async->Void={_ in}) async throws {
+        guard let key else{throw PairingError.invalidChallenge}
+        guard id>=(delete ? 7:10000),id<0x80000000 else{throw WatchFaceError.invalidRequest}
+        guard try await readVersion()=="1.0.0.73" else{throw PairingError.wrongVersion}
+        await replies.drain();try await sendFace(0x8052,Data([0xa5]))
+        let first=try await wait(0x52,key:key);guard first.first==1 else{throw WatchFaceError.rejected(first.first ?? 255)}
+        var header=Data([3])
+        for n:UInt32 in [delete ? id:0,delete ? 0:id,UInt32(face.data.count)] {header.append(contentsOf:(0..<4).map{UInt8(truncatingIfNeeded:n>>(8*$0))})}
+        await replies.drain();try await sendFace(0x9075,header)
+        let second=try await wait(0xa075,key:key);guard second.first==1 else{throw WatchFaceError.rejected(second.first ?? 255)}
+        let until=ContinuousClock.now + .seconds(1800);var ranges=[Range<Int>]()
+        while ContinuousClock.now<until {
+            try Task.checkCancellation()
+            guard let (command,raw)=await replies.next(.seconds(25)) else{throw PairingError.timeout}
+            guard let body=WireKit.open(key,raw) else{continue}
+            if command==0xa065 {
+                try await sendFace(0x9065,Data([0xa5]))
+                guard body.first==1 else{if body.first==10{throw WatchFaceError.notActivated};throw WatchFaceError.rejected(body.first ?? 255)}
+                guard ranges.reduce(0,{$0+$1.count})==face.data.count else{throw WatchFaceError.invalidRequest}
+                await progress(face.data.count);return
+            }
+            guard command==0xa064 else{continue}
+            guard body.count>=9 else{throw WatchFaceError.invalidRequest}
+            let offset=(0..<4).reduce(0){$0|Int(body[$1])<<(8*(3-$1))},length=(0..<4).reduce(0){$0|Int(body[4+$1])<<(8*(3-$1))}
+            guard offset<=face.data.count,length>0,length<=face.data.count-offset,length<=65535*160 else{throw WatchFaceError.invalidRequest}
+            try await sendFace(0x9064,Data(face.data[offset..<offset+length]),plain:true)
+            var merged=offset..<offset+length,keep=[Range<Int>]()
+            for r in ranges {if r.upperBound<merged.lowerBound || merged.upperBound<r.lowerBound{keep.append(r)}else{merged=min(r.lowerBound,merged.lowerBound)..<max(r.upperBound,merged.upperBound)}}
+            keep.append(merged);ranges=keep.sorted{$0.lowerBound<$1.lowerBound}
+            await progress(ranges.reduce(0,{$0+$1.count}))
         }
         throw PairingError.timeout
     }

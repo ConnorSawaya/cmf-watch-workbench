@@ -23,6 +23,7 @@ sys.path.insert(0,str(wp))
 cmf = args.fixtures.parent
 out = root / f'build/arm-proof/{time.time_ns()}'
 out.mkdir(parents=True, exist_ok=True)
+report_path=root/'build/arm-proof/report.json'
 
 def free_port():
     with socket.socket() as s:
@@ -153,7 +154,7 @@ def main():
                 raise RuntimeError('Virtual watch did not boot')
             report = asyncio.run(verify_all(hci))
             (out / 'report.json').write_text(json.dumps(report, indent=2))
-            (root/'build/arm-proof/report.json').write_text(json.dumps(report,indent=2))
+            report_path.write_text(json.dumps(report,indent=2))
             print(json.dumps(report, indent=2))
         finally:
             for p in reversed(processes):

@@ -51,3 +51,25 @@ recovery checks remain explicit hardware work, never a scheduled CI action.
 The [0.1.0 ARM report](verification/0.1.0-arm.json) records the tested package
 hashes. It is test evidence, not a substitute for reviewing new code or rerunning
 the checks after a change.
+
+## Watch-face checks
+
+Run `swift test --package-path ios/CompanionCore` and
+`./android/gradlew -p android :protocol:test :app:lintRelease` for codec,
+upload, malformed-range and activation-refusal checks. The Swift face tests
+also interleave fragmented face notifications with command-channel messages.
+
+The generated Xcode scheme includes `WatchFacesUITests`. Run `xcodebuild test`
+with a named iPhone simulator destination to check creation, offline persistence
+and disconnected installation controls.
+
+For the native stock-firmware check, build the Debug iOS companion and launch it
+in the simulator with `-export-test-face`. Copy that newly generated file from
+its Documents/watch-faces folder to `build/watchface-fixture/face.wfdl`.
+Run `tools/verify_watch_faces.py` with the same six local firmware/emulator
+arguments as `tools/verify_arm_apps.py`. It uses the actual Swift uploader
+through loopback H4, frees one disposable reference slot through stock commands,
+checks activation and observes a natural minute tick. It writes
+`build/watch-face-arm-report.json` separately from the app-package proof.
+It cannot address physical Bluetooth hardware. Local vendor fixtures and ROMs
+remain prerequisites and are never included in the source or report.

@@ -86,6 +86,15 @@ public final class GattLink implements WatchSession.Link, AutoCloseable {
 
   @Override
   public synchronized void write(String uuid, byte[] data) throws Exception {
+    writeMode(uuid, data, BluetoothGattCharacteristic.WRITE_TYPE_DEFAULT);
+  }
+
+  @Override
+  public synchronized void writeWithoutResponse(String uuid, byte[] data) throws Exception {
+    writeMode(uuid, data, BluetoothGattCharacteristic.WRITE_TYPE_NO_RESPONSE);
+  }
+
+  private void writeMode(String uuid, byte[] data, int mode) throws Exception {
     if (!connected) throw new IOException("Watch disconnected");
     BluetoothGattCharacteristic c = find(uuid);
     if (c == null) throw new IOException("Required watch channel is unavailable");
@@ -95,11 +104,9 @@ public final class GattLink implements WatchSession.Link, AutoCloseable {
     try {
       boolean accepted;
       if (Build.VERSION.SDK_INT >= 33)
-        accepted =
-            gatt.writeCharacteristic(c, data, BluetoothGattCharacteristic.WRITE_TYPE_DEFAULT)
-                == BluetoothStatusCodes.SUCCESS;
+        accepted = gatt.writeCharacteristic(c, data, mode) == BluetoothStatusCodes.SUCCESS;
       else {
-        c.setWriteType(BluetoothGattCharacteristic.WRITE_TYPE_DEFAULT);
+        c.setWriteType(mode);
         c.setValue(data);
         accepted = gatt.writeCharacteristic(c);
       }

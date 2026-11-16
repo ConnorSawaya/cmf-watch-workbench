@@ -90,6 +90,7 @@ public final class MainActivity extends Activity {
   @Override
   protected void onResume() {
     super.onResume();
+    watch.listen(this::stateChanged);
     watch.foreground(true);
     stateChanged();
   }
@@ -794,6 +795,8 @@ public final class MainActivity extends Activity {
     action(p, "Find watch", () -> watch.findWatch(true), watch.standard && !watch.busy);
     action(p, "Stop finding watch", () -> watch.findWatch(false), watch.standard && !watch.busy);
     heading(p, "Daily controls");
+    action(
+        p, "Watch faces", () -> startActivity(new Intent(this, FaceActivity.class)), !watch.busy);
     action(p, "Alarms", this::alarmsDialog, watch.standard && !watch.busy);
     action(p, "Favorite contacts", this::contactsDialog, watch.standard && !watch.busy);
     action(

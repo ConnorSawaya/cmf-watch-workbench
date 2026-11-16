@@ -18,6 +18,7 @@
 | Alarms and favorite contacts | Implemented | Implemented |
 | Units, wrist wake, time format, goals, profile, reminders, monitoring | Supported protocol controls | Supported protocol controls |
 | Reviewed app installs and loader updates | Implemented | Implemented |
+| Custom face editor, photo background, import/export and stock-channel upload | Implemented; ARM uploader and iOS UI checks | Implemented; JVM and emulator UI checks |
 | Native watch region download/resume/readback | Implemented | Implemented |
 | Regional phone map/search/saved points | Rich CMFMAP1 reader | Native WP2MAP1 reader |
 | Watch GNSS status and phone position fallback | Implemented | Implemented |
@@ -60,3 +61,8 @@ Trail Map v11, codec 2 native rendering, swipe/crown input and cold restart
 without phone artwork. Its public sample reached 10 ms on the last redraw
 and 79 ms on the slowest measured redraw. These are emulator measurements,
 not physical-watch frame rates.
+
+Custom home-screen faces are covered separately by the
+[0.3.0 face report](verification/0.3.0-faces.json). The production Swift uploader
+activated an independently generated face in stock ARM firmware and its clock
+advanced naturally. Physical face installation remains pending on both platforms.

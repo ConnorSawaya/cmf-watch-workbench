@@ -52,6 +52,24 @@ targets:
         INFOPLIST_KEY_NSCameraUsageDescription: Scan the QR code displayed by your CMF watch to choose it for pairing.
         INFOPLIST_KEY_UIFileSharingEnabled: YES
         INFOPLIST_KEY_LSSupportsOpeningDocumentsInPlace: YES
-        MARKETING_VERSION: 0.2.0
-        CURRENT_PROJECT_VERSION: 2
+        MARKETING_VERSION: 0.3.0
+        CURRENT_PROJECT_VERSION: 3
         OTHER_LDFLAGS: '-lz'
+  WatchFacesUITests:
+    type: bundle.ui-testing
+    platform: iOS
+    sources:
+      - path: UITests
+    dependencies:
+      - target: TrailCompanion
+    settings:
+      base:
+        GENERATE_INFOPLIST_FILE: YES
+schemes:
+  TrailCompanion:
+    build:
+      targets:
+        TrailCompanion: all
+    test:
+      targets:
+        - WatchFacesUITests

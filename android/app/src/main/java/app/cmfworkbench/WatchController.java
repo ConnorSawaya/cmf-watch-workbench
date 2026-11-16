@@ -561,14 +561,53 @@ public final class WatchController {
         });
   }
 
+  public String deviceKey() {
+    return device == null ? "" : device.getAddress();
+  }
+
+  public void transferFace(File file, int id, boolean delete, Runnable confirmed) {
+    run(
+        delete ? "Removing watch face" : "Installing watch face",
+        () -> {
+          ensureStandard();
+          if (custom) require(session.ping()[0] == 255, "Close the custom app on the watch first");
+          require(file.length() <= WatchFace.MAX_BYTES, "Face is too large");
+          WatchFace face;
+          try (InputStream in = new FileInputStream(file)) {
+            face = new WatchFace(FaceFiles.read(in, WatchFace.MAX_BYTES));
+          }
+          total = face.bytes().length;
+          session.uploadFace(
+              face,
+              id,
+              delete,
+              n -> {
+                received = n;
+                progress = (double) n / total;
+                publish();
+              });
+          confirmed.run();
+          status =
+              delete
+                  ? "Watch confirmed the face was removed"
+                  : "Watch confirmed the face is active";
+        });
+  }
+
   public void downloadMap() {
     run(
         "Downloading offline map",
         () -> {
           require(custom && map != null, "Connect to the app loader and import a map first");
           require(
-              apps.stream().anyMatch(h -> h.name().equals("loader") && h.version() >= (map.codec==2?5:4))
-                  && apps.stream().anyMatch(h -> h.name().equals("trail-map") && h.version() >= (map.codec==2?11:9)),
+              apps.stream()
+                      .anyMatch(
+                          h -> h.name().equals("loader") && h.version() >= (map.codec == 2 ? 5 : 4))
+                  && apps.stream()
+                      .anyMatch(
+                          h ->
+                              h.name().equals("trail-map")
+                                  && h.version() >= (map.codec == 2 ? 11 : 9)),
               "Update the loader and Trail Map first");
           require(session.ping()[0] == trailSlot(), "Open Trail Map on the watch first");
           total = map.data.length;

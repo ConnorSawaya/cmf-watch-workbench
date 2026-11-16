@@ -14,8 +14,13 @@ public enum Uuid {
 public protocol Link: AnyObject, Sendable {
     /// Writes a characteristic (the BLE side picks write-with-response for frames over MTU-3).
     func write(_ uuid: String, _ data: Data) async throws
+    func writeWithoutResponse(_ uuid: String, _ data: Data) async throws
     /// Called for every notification: (characteristic uuid, value).
     func onNotify(_ handler: @escaping @Sendable (String, Data) -> Void)
+}
+
+public extension Link {
+    func writeWithoutResponse(_ uuid:String,_ data:Data) async throws {try await write(uuid,data)}
 }
 
 enum Cmd {

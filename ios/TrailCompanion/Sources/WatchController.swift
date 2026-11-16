@@ -77,6 +77,30 @@ import CompanionCore
     private var setupStandardRequested=CommandLine.arguments.contains("-setup-standard-controls")
     private var syncHealthRequested=CommandLine.arguments.contains("-sync-health")
     private var flashPreparedRequested=CommandLine.arguments.contains("-flash-prepared-firmware")
+    @Published var faces=FaceLibrary.load()
+    @Published var faceStatus=""
+    func saveFace(_ file:FaceFile) {do{_ = try FaceLibrary.add(file);faces=FaceLibrary.load();faceStatus="Face saved on this phone"}catch{message=error.localizedDescription}}
+    func faceIsInstalled(_ face:SavedFace)->Bool {face.dialID != nil && face.installedDevice==ble?.identifier}
+    func deleteLocalFace(_ face:SavedFace) {do {let kept=faces.filter{$0.id != face.id};try FaceLibrary.save(kept);try? FileManager.default.removeItem(at:face.file);try? FileManager.default.removeItem(at:face.thumbnail);faces=kept}catch{message=error.localizedDescription}}
+    func installFace(_ face:SavedFace) {
+        guard !faceIsInstalled(face) else{return}
+        guard runningApp==nil else{message="Close the custom app on the watch before installing a face.";return}
+        guard let device=ble?.identifier else{message="Connect the watch before installing a face.";return}
+        stockOperation("Installing watch face…") {s in
+            let file=try FaceFile(Data(contentsOf:face.file)),id=(face.pendingDevice==device ? face.pendingDialID:nil) ?? UInt32.random(in:10000..<0x7fffffff)
+            var pending=self.faces;if let i=pending.firstIndex(where:{$0.id==face.id}){pending[i].pendingDialID=id;pending[i].pendingDevice=device};try FaceLibrary.save(pending);self.faces=pending
+            UIApplication.shared.isIdleTimerDisabled=true;defer{UIApplication.shared.isIdleTimerDisabled=false}
+            try await s.uploadFace(file,id:id,progress:{n in await MainActor.run {self.progress=Double(n)/Double(file.data.count);self.faceStatus=n==file.data.count ? "Activating face…":"Sending face: \(n.formatted()) / \(file.data.count.formatted()) bytes"}})
+            var list=self.faces;if let i=list.firstIndex(where:{$0.id==face.id}){list[i].dialID=id;list[i].installedDevice=device;list[i].pendingDialID=nil;list[i].pendingDevice=nil};try FaceLibrary.save(list);self.faces=list;self.faceStatus="Watch confirmed the face is active"
+        }
+    }
+    func removeFace(_ face:SavedFace) {
+        guard runningApp==nil,faceIsInstalled(face),let id=face.dialID else{return}
+        stockOperation("Removing watch face…") {s in
+            let file=try FaceFile(Data(contentsOf:face.file));try await s.uploadFace(file,id:id,delete:true)
+            var list=self.faces;if let i=list.firstIndex(where:{$0.id==face.id}){list[i].dialID=nil;list[i].installedDevice=nil};try FaceLibrary.save(list);self.faces=list;self.faceStatus="Watch confirmed the face was removed"
+        }
+    }
     private var installPreparedRequested=CommandLine.arguments.contains("-install-prepared-code")
     @Published var firmwareStatus="Loader firmware has not been checked"
     private var ble:WatchBLE?
@@ -86,6 +110,7 @@ import CompanionCore
     private var sessionGeneration=0
     private var lastDiagnosticProgress=Date.distantPast
     init() {
+        if CommandLine.arguments.contains("-export-test-face"),let file=try? FaceArtwork.make(name:"Workbench",accent:.white,rounded:true,photo:nil){try? FaceLibrary.add(file);faces=FaceLibrary.load()}
         if let dir=FileManager.default.urls(for:.documentDirectory,in:.userDomainMask).first,
            let data=try? Data(contentsOf:dir.appendingPathComponent("watch-health.json")),
            let saved=try? JSONDecoder().decode(WatchHealth.self,from:data) {health=saved}

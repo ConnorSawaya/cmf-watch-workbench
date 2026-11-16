@@ -22,6 +22,10 @@ public final class WatchSession implements Transfer.Channel, AutoCloseable {
   public interface Link {
     void write(String uuid, byte[] data) throws Exception;
 
+    default void writeWithoutResponse(String uuid, byte[] data) throws Exception {
+      write(uuid, data);
+    }
+
     void listen(BiConsumer<String, byte[]> listener);
   }
 
@@ -261,6 +265,82 @@ public final class WatchSession implements Transfer.Channel, AutoCloseable {
           Arrays.equals(exchange(command, new byte[] {0}, command | 0xa000, stockKey, 7000), value),
           "Unit setting readback did not match");
     }
+  }
+
+  public static final String FACE = "02f00000-0000-0000-0000-00000000ffe1";
+
+  private void facePacket(int command, byte[] body, boolean plain) throws Exception {
+    int limit = plain ? 160 : 155, count = Math.max(1, (body.length + limit - 1) / limit);
+    require(count <= 65535, "Invalid face request");
+    for (int i = 0; i < count; i++) {
+      if (Thread.currentThread().isInterrupted()) throw new InterruptedException();
+      link.writeWithoutResponse(
+          FACE,
+          Frames.packet(
+              0xffff,
+              command,
+              count,
+              i + 1,
+              Arrays.copyOfRange(body, i * limit, Math.min(body.length, (i + 1) * limit)),
+              plain ? null : stockKey));
+      if (plain) Thread.sleep(10);
+    }
+  }
+
+  public void uploadFace(WatchFace face, int id, boolean delete, IntConsumer progress)
+      throws Exception {
+    require(stockKey != null, "Pair standard controls first");
+    require(id >= (delete ? 7 : 10000), "Invalid face id");
+    require(
+        at("GETVERSION").equals("1.0.0.73"),
+        "This face uploader supports Watch Pro 2 firmware 1.0.0.73");
+    byte[] data = face.bytes();
+    replies.clear();
+    facePacket(0x8052, new byte[] {(byte) 0xa5}, false);
+    byte[] a = waitReply(0x52, stockKey, 7000);
+    require(a.length > 0 && a[0] == 1, "Face transfer was rejected");
+    replies.clear();
+    facePacket(
+        0x9075,
+        join(new byte[] {3}, le(delete ? id : 0, 4), le(delete ? 0 : id, 4), le(data.length, 4)),
+        false);
+    a = waitReply(0xa075, stockKey, 7000);
+    require(a.length > 0 && a[0] == 1, "Face transfer was rejected");
+    BitSet served = new BitSet(data.length);
+    long end = System.nanoTime() + 1_800_000_000_000L;
+    while (System.nanoTime() < end) {
+      if (Thread.currentThread().isInterrupted()) throw new InterruptedException();
+      Frames.Frame f = replies.poll(25, TimeUnit.SECONDS);
+      require(f != null, "Watch-face transfer timed out");
+      byte[] body = Frames.open(stockKey, f.body());
+      if (body == null) continue;
+      if (f.command() == 0xa065) {
+        facePacket(0x9065, new byte[] {(byte) 0xa5}, false);
+        require(
+            body.length > 0 && body[0] == 1,
+            body.length > 0 && body[0] == 10
+                ? "The file was stored but the face was not activated. Free a face slot on the"
+                    + " watch and retry. Existing faces were kept."
+                : "Watch rejected the face");
+        require(served.cardinality() == data.length, "Watch confirmed an incomplete face transfer");
+        progress.accept(data.length);
+        return;
+      }
+      if (f.command() != 0xa064) continue;
+      require(body.length >= 9, "Invalid face request");
+      long offset = ((long) be16(body, 0) << 16 | be16(body, 2)),
+          length = ((long) be16(body, 4) << 16 | be16(body, 6));
+      require(
+          offset <= data.length
+              && length > 0
+              && length <= data.length - offset
+              && length <= 65535 * 160,
+          "Watch requested invalid face data");
+      facePacket(0x9064, Arrays.copyOfRange(data, (int) offset, (int) (offset + length)), true);
+      served.set((int) offset, (int) (offset + length));
+      progress.accept(served.cardinality());
+    }
+    throw new IOException("Watch-face transfer timed out");
   }
 
   public void syncHealth() throws Exception {

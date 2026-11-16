@@ -12,6 +12,7 @@ struct SettingsScreen:View {
                     Button("Refresh battery") {watch.refreshBattery()}.disabled(watch.busy || !watch.connected)
                 }
                 Section("Everyday") {
+                    NavigationLink {WatchFacesScreen()} label:{FeatureRow(title:"Watch faces",subtitle:"Create, import and install your own faces",icon:"applewatch.watchface")}
                     NavigationLink {AlarmsScreen()} label:{FeatureRow(title:"Alarms",subtitle:"Times and repeat days",icon:"alarm")}
                     NavigationLink {ReminderScreen(ability:0x60,title:"Stand reminders")} label:{FeatureRow(title:"Stand reminders",subtitle:"Interval and quiet hours",icon:"figure.stand")}
                     NavigationLink {ReminderScreen(ability:0x61,title:"Water reminders")} label:{FeatureRow(title:"Water reminders",subtitle:"Interval and quiet hours",icon:"drop")}
@@ -31,7 +32,7 @@ struct SettingsScreen:View {
                     NavigationLink {WatchProfileScreen()} label:{FeatureRow(title:"Personal profile",subtitle:"Activity calculation settings",icon:"person")}
                 }
                 Section("Connection") {
-                    NavigationLink {StockFeatureGuide()} label:{FeatureRow(title:"Notifications, calls & watch faces",subtitle:"Setup and feature availability",icon:"bell")}
+                    NavigationLink {StockFeatureGuide()} label:{FeatureRow(title:"Notifications & calls",subtitle:"Setup and feature availability",icon:"bell")}
                     Button {watch.applySetting(.findWatch(true))} label:{FeatureRow(title:"Find my watch",subtitle:"Ring and vibrate nearby",icon:"wave.3.right")}.disabled(watch.busy || !watch.connected)
                     Button("Stop ringing") {watch.applySetting(.findWatch(false))}.disabled(watch.busy || !watch.connected)
                 }
@@ -102,7 +103,7 @@ struct WatchProfileScreen:View {
 struct StockFeatureGuide:View {
     var body:some View {List {
         Section("Available here") {Text("Pairing, battery status, offline maps, search, saved places and custom app transfers are available. Standard watch controls and health sync use documented commands; each operation requires the watch's acknowledgement.")}
-        Section("Continue using Nothing X") {FeatureRow(title:"Watch face gallery & photo faces",subtitle:"Download, customise and manage stock faces",icon:"applewatch.watchface");FeatureRow(title:"Calls & app notifications",subtitle:"Keep the system Bluetooth and Nothing X setup",icon:"bell");FeatureRow(title:"Weather & world clocks",subtitle:"Weather updates and city configuration",icon:"cloud.sun");FeatureRow(title:"Health integrations",subtitle:"Apple Health export and full workout history",icon:"heart.text.clipboard");FeatureRow(title:"Other stock tools",subtitle:"Quick replies, camera remote, music and advanced health alerts",icon:"ellipsis.circle")}
+        Section("Continue using Nothing X") {FeatureRow(title:"Calls & app notifications",subtitle:"Keep the system Bluetooth and Nothing X setup",icon:"bell");FeatureRow(title:"Weather & world clocks",subtitle:"Weather updates and city configuration",icon:"cloud.sun");FeatureRow(title:"Health integrations",subtitle:"Apple Health export and full workout history",icon:"heart.text.clipboard");FeatureRow(title:"Other stock tools",subtitle:"Quick replies, camera remote, music and advanced health alerts",icon:"ellipsis.circle")}
         Section {Text("This app is not yet a complete Nothing X replacement. Existing tools on the watch stay in the stock watch software. iPhone notifications depend on the system's accessory permissions; this app cannot read other apps' notifications.").font(.caption).foregroundStyle(.secondary);Link("Nothing X in the App Store",destination:URL(string:"https://apps.apple.com/app/id1568033706")!)}
     }.navigationTitle("Everyday features")}
 }

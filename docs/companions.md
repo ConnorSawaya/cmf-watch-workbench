@@ -11,9 +11,9 @@ five `.wp2app` release assets into `firmware/wp2-apps/target/`. With GitHub CLI:
 
 ```sh
 mkdir -p firmware/wp2-apps/target
-gh release download v0.1.0 --repo ConnorSawaya/cmf-watch-workbench \
+gh release download v0.2.0 --repo ConnorSawaya/cmf-watch-workbench \
   --pattern '*.wp2app' --dir firmware/wp2-apps/target
-python3 tools/stage_packages.py --proof docs/verification/0.1.0-arm.json
+python3 tools/stage_packages.py --proof docs/verification/0.2.0-arm.json
 ```
 
 Staging verifies each exact package hash and its checksums, then copies the
@@ -87,3 +87,6 @@ team and device, and run. No signing identity or device identifier is supplied
 by the project. Allow Bluetooth and, if wanted, location. Use Watch apps for
 reviewed package installs and map imports/downloads. The first stock patch is
 prepared separately as described in [getting started](getting-started.md).
+
+Both companions include a [watch-face editor and importer](watch-faces.md).
+Face upload uses the stock protocol and does not depend on staged app packages.

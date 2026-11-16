@@ -17,6 +17,8 @@ final class WatchBLE:NSObject,Link,@unchecked Sendable {
     private var handler:(@Sendable(String,Data)->Void)?
     private var writeContinuation:CheckedContinuation<Void,Error>?
     private var writeID=UUID()
+    private var bulkID=UUID()
+    private var bulkWrite:(CBCharacteristic,[Data],Int,CheckedContinuation<Void,Error>)?
     private var timer:DispatchWorkItem?
     private var wanted=false
     private var ready=false
@@ -47,7 +49,27 @@ final class WatchBLE:NSObject,Link,@unchecked Sendable {
             }
         }
     }
-    private func failWrite(_ error:Error) {let c=writeContinuation;writeContinuation=nil;c?.resume(throwing:error)}
+    func writeWithoutResponse(_ uuid:String,_ data:Data) async throws {
+        try Task.checkCancellation()
+        try await withCheckedThrowingContinuation { (continuation:CheckedContinuation<Void,Error>) in
+            DispatchQueue.main.async {
+                guard let p=self.device,p.state == .connected,let ch=self.chars[CBUUID(string:uuid)],ch.properties.contains(.writeWithoutResponse),self.bulkWrite==nil else{continuation.resume(throwing:WireError.closed);return}
+                let maximum=p.maximumWriteValueLength(for:.withoutResponse);guard maximum>0 else{continuation.resume(throwing:WireError.closed);return}
+                let pieces=stride(from:0,to:data.count,by:maximum).map{Data(data[$0..<min($0+maximum,data.count)])}
+                let id=UUID();self.bulkID=id;self.bulkWrite=(ch,pieces,0,continuation);self.pumpBulk()
+                DispatchQueue.main.asyncAfter(deadline:.now()+10){if self.bulkID==id && self.bulkWrite != nil{self.failWrite(WireError.timeout("Watch-face write"));self.disconnect()}}
+            }
+        }
+    }
+    private func pumpBulk(){
+        guard let p=device else{return}
+        while let (ch,pieces,index,c)=bulkWrite,p.canSendWriteWithoutResponse {
+            if index==pieces.count{bulkWrite=nil;c.resume();return}
+            p.writeValue(pieces[index],for:ch,type:.withoutResponse);bulkWrite=(ch,pieces,index+1,c)
+        }
+        if let (_,pieces,index,c)=bulkWrite,index==pieces.count{bulkWrite=nil;c.resume()}
+    }
+    private func failWrite(_ error:Error) {let c=writeContinuation;writeContinuation=nil;c?.resume(throwing:error);let b=bulkWrite;bulkWrite=nil;b?.3.resume(throwing:error)}
     private func matches(_ name:String)->Bool {name.lowercased().contains("watch pro 2") && (desiredSuffix==nil || name.uppercased().hasSuffix(desiredSuffix!))}
     private func find() {
         guard device?.state != .connecting,!(device?.state == .connected && ready) else{return}
@@ -87,6 +109,7 @@ extension WatchBLE:CBCentralManagerDelegate {
     }
 }
 extension WatchBLE:CBPeripheralDelegate {
+    func peripheralIsReady(toSendWriteWithoutResponse peripheral:CBPeripheral){pumpBulk()}
     func peripheral(_ p:CBPeripheral,didDiscoverServices error:Error?) {
         if error != nil {onState?(.failed("Watch service discovery failed."));return}
         p.services?.forEach {p.discoverCharacteristics(nil,for:$0)}

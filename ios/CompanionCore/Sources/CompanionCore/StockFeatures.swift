@@ -73,7 +73,13 @@ public struct WatchContact:Identifiable,Equatable,Sendable {
     public static func decode(_ d:Data)throws->[Self] {
         if d.isEmpty {return []}
         guard d.count%57==0,d.count<=1140 else{throw StockFeatureError.invalidData}
-        return stride(from:0,to:d.count,by:57).map {i in Self(name:String(decoding:d[i..<i+32].prefix(while:{$0 != 0}),as:UTF8.self),number:String(decoding:d[i+32..<i+57].prefix(while:{$0 != 0}),as:UTF8.self))}
+        return stride(from: 0, to: d.count, by: 57).map { i -> Self in
+            let nameBytes = d[i..<(i + 32)].prefix(while: { $0 != 0 })
+            let numberBytes = d[(i + 32)..<(i + 57)].prefix(while: { $0 != 0 })
+            let name = String(decoding: nameBytes, as: UTF8.self)
+            let number = String(decoding: numberBytes, as: UTF8.self)
+            return Self(name: name, number: number)
+        }
     }
 }
 public enum WatchSetting:Sendable {

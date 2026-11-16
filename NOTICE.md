@@ -16,6 +16,10 @@
 - Example geometry is © OpenStreetMap contributors, ODbL 1.0. The exact public
   extract URL and revision are recorded in `examples/source.json`. Generated
   map files retain attribution. See <https://www.openstreetmap.org/copyright>.
+- The watch's built-in US state overview is simplified from US Census Bureau
+  2025 cartographic boundaries (1:500,000), public domain:
+  <https://www2.census.gov/geo/tiger/GENZ2025/kml/cb_2025_us_state_500k.zip>.
+  It contains state/DC outlines rather than local road or position data.
 - The optional supplemental-trail import format can carry USGS public-domain
   data. No such regional dataset is bundled.
 - `cmf-watch-utils` and `cmf-watch-fwkit` are external build/emulator tools under

@@ -44,7 +44,12 @@ public struct Trace: Codable, Hashable, Sendable {
 public func parseTrace(_ d: Data) -> Trace? {
     let b = [UInt8](d)
     guard let n = b.first, b.count >= 1 + Int(n) * 3 + 2 else { return nil }
-    let sets = (0..<Int(n)).map { i in SetMark(ex: Int(b[1 + i * 3]), t: Int(b[2 + i * 3]) | Int(b[3 + i * 3]) << 8) }
+    let sets: [SetMark] = (0..<Int(n)).map { i in
+        let offset = 1 + i * 3
+        let exercise = Int(b[offset])
+        let seconds = Int(b[offset + 1]) | (Int(b[offset + 2]) << 8)
+        return SetMark(ex: exercise, t: seconds)
+    }
     let at = 1 + Int(n) * 3
     let nhr = Int(b[at]) | Int(b[at + 1]) << 8
     guard b.count == at + 2 + nhr else { return nil }

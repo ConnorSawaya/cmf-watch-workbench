@@ -17,3 +17,4 @@ ios/Workout/Resources/workout.wp2app
 ios/WorkoutWidget/Info.plist
 
 !**/font-data.bin
+!sdk/examples/trail-map/src/us-states.bin

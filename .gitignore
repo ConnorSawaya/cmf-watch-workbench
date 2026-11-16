@@ -36,3 +36,4 @@
 **/build/
 **/.venv/
 **/runs/
+!firmware/wp2-apps/sdk/examples/trail-map/src/us-states.bin

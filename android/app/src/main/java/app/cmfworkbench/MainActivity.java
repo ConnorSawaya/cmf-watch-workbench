@@ -65,7 +65,7 @@ public final class MainActivity extends Activity {
         .setSystemUiVisibility(
             View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR | View.SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR);
     root = new LinearLayout(this);
-    root.setOrientation(1);
+    root.setOrientation(LinearLayout.VERTICAL);
     root.setBackgroundColor(PAPER);
     root.setFitsSystemWindows(true);
     setContentView(root);
@@ -78,7 +78,7 @@ public final class MainActivity extends Activity {
           return insets;
         });
     content = new LinearLayout(this);
-    content.setOrientation(1);
+    content.setOrientation(LinearLayout.VERTICAL);
     root.addView(content, new LinearLayout.LayoutParams(-1, 0, 1));
     nav = new LinearLayout(this);
     nav.setPadding(dp(10), dp(6), dp(10), dp(8));
@@ -127,7 +127,7 @@ public final class MainActivity extends Activity {
 
   private LinearLayout column() {
     LinearLayout l = new LinearLayout(this);
-    l.setOrientation(1);
+    l.setOrientation(LinearLayout.VERTICAL);
     return l;
   }
 
@@ -154,7 +154,7 @@ public final class MainActivity extends Activity {
         new android.content.res.ColorStateList(
             new int[][] {new int[] {-android.R.attr.state_enabled}, new int[] {}},
             new int[] {0xff8e968d, ORANGE}));
-    b.setTypeface(Typeface.create("sans-serif-medium", 0));
+    b.setTypeface(Typeface.create("sans-serif-medium", Typeface.NORMAL));
     b.setMinHeight(dp(48));
     b.setStateListAnimator(null);
     b.setElevation(0);
@@ -1368,7 +1368,7 @@ public final class MainActivity extends Activity {
       p.setColor(0xff949c92);
       c.drawRoundRect(x + r - 1, y - 8, x + r + 9, y + 12, 3, 3, p);
       p.setColor(0xfff2f1e8);
-      p.setTypeface(Typeface.create("sans-serif-medium", 0));
+      p.setTypeface(Typeface.create("sans-serif-medium", Typeface.NORMAL));
       p.setTextSize(w * .15f);
       p.setTextAlign(Paint.Align.CENTER);
       c.drawText("CMF", x, y + 5, p);
